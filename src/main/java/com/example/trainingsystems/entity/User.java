@@ -27,4 +27,7 @@ public class User {
 
     @Column(name = "binding_code", length = 12)
     private String bindingCode;
+
+    @Column(name = "friend_code", unique = true, length = 12)
+    private String friendCode;
 }

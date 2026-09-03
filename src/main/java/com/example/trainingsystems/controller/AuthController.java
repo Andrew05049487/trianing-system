@@ -4,16 +4,18 @@ import com.example.trainingsystems.dto.LoginRequest;
 import com.example.trainingsystems.dto.RegisterRequest;
 import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.repository.UserRepository;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin
+@CrossOrigin(origins = "*")
 public class AuthController {
 
     private final UserRepository userRepository;
@@ -22,58 +24,169 @@ public class AuthController {
         this.userRepository = userRepository;
     }
 
+    /*
+     * 註冊
+     *
+     * POST /api/auth/register
+     */
     @PostMapping("/register")
-    public Object register(@RequestBody RegisterRequest request) {
-        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
-            return "此 Email 已被註冊";
+    public ResponseEntity<?> register(
+        @RequestBody RegisterRequest request
+    ) {
+        if (request.getEmail() == null ||
+            request.getEmail().isBlank()) {
+            return ResponseEntity
+                .badRequest()
+                .body("請輸入 Email");
+        }
+
+        if (request.getPassword() == null ||
+            request.getPassword().isBlank()) {
+            return ResponseEntity
+                .badRequest()
+                .body("請輸入密碼");
+        }
+
+        if (request.getName() == null ||
+            request.getName().isBlank()) {
+            return ResponseEntity
+                .badRequest()
+                .body("請輸入姓名");
+        }
+
+        String email = request
+            .getEmail()
+            .trim()
+            .toLowerCase(Locale.ROOT);
+
+        if (userRepository.findByEmail(email).isPresent()) {
+            return ResponseEntity
+                .badRequest()
+                .body("此 Email 已經註冊");
         }
 
         User user = new User();
-        user.setEmail(request.getEmail());
+        user.setName(request.getName().trim());
+        user.setEmail(email);
         user.setPassword(request.getPassword());
-        user.setName(request.getName());
         user.setRole("PATIENT");
-        user.setBindingCode(generateBindingCode());
+
+        // 帳號綁定功能使用
+        user.setBindingCode(generateUniqueBindingCode());
+
+        // 加好友功能使用
+        user.setFriendCode(generateUniqueFriendCode());
 
         userRepository.save(user);
-        return "註冊成功";
+
+        return ResponseEntity.ok("註冊成功");
     }
 
+    /*
+     * 登入
+     *
+     * POST /api/auth/login
+     */
     @PostMapping("/login")
-    public Object login(@RequestBody LoginRequest request) {
-        User user = userRepository
-                .findByEmail(request.getEmail())
-                .orElse(null);
-
-        if (user == null) {
-            return "帳號不存在";
+    public ResponseEntity<?> login(
+        @RequestBody LoginRequest request
+    ) {
+        if (request.getEmail() == null ||
+            request.getPassword() == null) {
+            return ResponseEntity
+                .badRequest()
+                .body("請輸入 Email 和密碼");
         }
+
+        String email = request
+            .getEmail()
+            .trim()
+            .toLowerCase(Locale.ROOT);
+
+        Optional<User> optionalUser =
+            userRepository.findByEmail(email);
+
+        if (optionalUser.isEmpty()) {
+            return ResponseEntity
+                .badRequest()
+                .body("帳號或密碼錯誤");
+        }
+
+        User user = optionalUser.get();
 
         if (!user.getPassword().equals(request.getPassword())) {
-            return "密碼錯誤";
+            return ResponseEntity
+                .badRequest()
+                .body("帳號或密碼錯誤");
         }
 
-        Map<String, Object> result = new HashMap<>();
+        /*
+         * 若舊帳號沒有代碼，登入時自動補上。
+         */
+        boolean needsSave = false;
+
+        if (user.getBindingCode() == null ||
+            user.getBindingCode().isBlank()) {
+            user.setBindingCode(generateUniqueBindingCode());
+            needsSave = true;
+        }
+
+        if (user.getFriendCode() == null ||
+            user.getFriendCode().isBlank()) {
+            user.setFriendCode(generateUniqueFriendCode());
+            needsSave = true;
+        }
+
+        if (needsSave) {
+            userRepository.save(user);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
         result.put("message", "登入成功");
         result.put("userId", user.getId());
         result.put("name", user.getName());
         result.put("email", user.getEmail());
         result.put("role", user.getRole());
         result.put("bindingCode", user.getBindingCode());
+        result.put("friendCode", user.getFriendCode());
 
-        return result;
+        return ResponseEntity.ok(result);
     }
 
-    private String generateBindingCode() {
+    /*
+     * 產生不重複的帳號綁定碼。
+     */
+    private String generateUniqueBindingCode() {
         String code;
 
         do {
             code = UUID.randomUUID()
-                    .toString()
-                    .replace("-", "")
-                    .substring(0, 8)
-                    .toUpperCase(Locale.ROOT);
-        } while (userRepository.findByBindingCode(code).isPresent());
+                .toString()
+                .replace("-", "")
+                .substring(0, 8)
+                .toUpperCase(Locale.ROOT);
+        } while (
+            userRepository.findByBindingCode(code).isPresent()
+        );
+
+        return code;
+    }
+
+    /*
+     * 產生不重複的好友代碼。
+     */
+    private String generateUniqueFriendCode() {
+        String code;
+
+        do {
+            code = UUID.randomUUID()
+                .toString()
+                .replace("-", "")
+                .substring(0, 8)
+                .toUpperCase(Locale.ROOT);
+        } while (
+            userRepository.findByFriendCode(code).isPresent()
+        );
 
         return code;
     }

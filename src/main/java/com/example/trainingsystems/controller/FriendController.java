@@ -1,0 +1,118 @@
+package com.example.trainingsystems.controller;
+
+import com.example.trainingsystems.dto.FriendRequestCreateDto;
+import com.example.trainingsystems.dto.FriendRequestRespondDto;
+import com.example.trainingsystems.service.FriendService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/friends")
+@CrossOrigin(origins = "*")
+public class FriendController {
+
+    private final FriendService friendService;
+
+    public FriendController(FriendService friendService) {
+        this.friendService = friendService;
+    }
+
+    /*
+     * 送出好友邀請
+     *
+     * POST /api/friends/requests
+     */
+    @PostMapping("/requests")
+    public ResponseEntity<?> sendRequest(
+        @RequestBody FriendRequestCreateDto requestDto
+    ) {
+        try {
+            return ResponseEntity.ok(
+                friendService.sendRequest(requestDto)
+            );
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity
+                .badRequest()
+                .body(Map.of(
+                    "message",
+                    exception.getMessage()
+                ));
+        }
+    }
+
+    /*
+     * 查看尚未處理的好友邀請
+     *
+     * GET /api/friends/requests/pending/{receiverId}
+     */
+    @GetMapping("/requests/pending/{receiverId}")
+    public ResponseEntity<?> getPendingRequests(
+        @PathVariable Long receiverId
+    ) {
+        try {
+            return ResponseEntity.ok(
+                friendService.getPendingRequests(receiverId)
+            );
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity
+                .badRequest()
+                .body(Map.of(
+                    "message",
+                    exception.getMessage()
+                ));
+        }
+    }
+
+    /*
+     * 接受或拒絕好友邀請
+     *
+     * PUT /api/friends/requests/{requestId}/respond
+     */
+    @PutMapping("/requests/{requestId}/respond")
+    public ResponseEntity<?> respondToRequest(
+        @PathVariable Long requestId,
+        @RequestBody FriendRequestRespondDto responseDto
+    ) {
+        try {
+            return ResponseEntity.ok(
+                friendService.respondToRequest(
+                    requestId,
+                    responseDto
+                )
+            );
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity
+                .badRequest()
+                .body(Map.of(
+                    "message",
+                    exception.getMessage()
+                ));
+        }
+    }
+
+    /*
+     * 取得使用者的好友列表
+     *
+     * GET /api/friends/{userId}
+     */
+    @GetMapping("/{userId}")
+    public ResponseEntity<?> getFriends(
+        @PathVariable Long userId
+    ) {
+        try {
+            return ResponseEntity.ok(
+                friendService.getFriends(userId)
+            );
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of(
+                    "message",
+                    exception.getMessage()
+                ));
+        }
+    }
+}
