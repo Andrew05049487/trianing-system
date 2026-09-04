@@ -4,6 +4,7 @@ import com.example.trainingsystems.dto.CustomRehabExerciseDto;
 import com.example.trainingsystems.entity.CustomRehabExerciseEntity;
 import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.repository.CustomRehabExerciseRepository;
+import com.example.trainingsystems.repository.CustomExerciseAssignmentRepository;
 import com.example.trainingsystems.repository.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,17 +39,20 @@ public class CustomRehabExerciseService {
     );
 
     private final CustomRehabExerciseRepository exerciseRepository;
+    private final CustomExerciseAssignmentRepository assignmentRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final CustomExerciseIdentityService identityService;
 
     public CustomRehabExerciseService(
         CustomRehabExerciseRepository exerciseRepository,
+        CustomExerciseAssignmentRepository assignmentRepository,
         UserRepository userRepository,
         ObjectMapper objectMapper,
         CustomExerciseIdentityService identityService
     ) {
         this.exerciseRepository = exerciseRepository;
+        this.assignmentRepository = assignmentRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
         this.identityService = identityService;
@@ -122,7 +126,9 @@ public class CustomRehabExerciseService {
     @Transactional
     public void delete(String id, Long therapistId, String identityToken) {
         requireTherapist(therapistId, identityToken);
-        exerciseRepository.delete(requireOwnedExercise(id, therapistId));
+        CustomRehabExerciseEntity exercise = requireOwnedExercise(id, therapistId);
+        assignmentRepository.deleteAllByCustomExercise_Id(id);
+        exerciseRepository.delete(exercise);
     }
 
     private User requireTherapist(Long userId, String identityToken) {
@@ -265,7 +271,7 @@ public class CustomRehabExerciseService {
         }
     }
 
-    private CustomRehabExerciseDto toDto(CustomRehabExerciseEntity entity) {
+    CustomRehabExerciseDto toDto(CustomRehabExerciseEntity entity) {
         CustomRehabExerciseDto dto = new CustomRehabExerciseDto();
         dto.setId(entity.getId());
         dto.setName(entity.getName());

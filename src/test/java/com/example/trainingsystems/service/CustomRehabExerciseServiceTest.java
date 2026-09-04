@@ -4,6 +4,7 @@ import com.example.trainingsystems.dto.CustomRehabExerciseDto;
 import com.example.trainingsystems.entity.CustomRehabExerciseEntity;
 import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.repository.CustomRehabExerciseRepository;
+import com.example.trainingsystems.repository.CustomExerciseAssignmentRepository;
 import com.example.trainingsystems.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +37,9 @@ class CustomRehabExerciseServiceTest {
     private CustomRehabExerciseRepository exerciseRepository;
 
     @Mock
+    private CustomExerciseAssignmentRepository assignmentRepository;
+
+    @Mock
     private UserRepository userRepository;
 
     @Mock
@@ -48,6 +52,7 @@ class CustomRehabExerciseServiceTest {
     void setUp() {
         service = new CustomRehabExerciseService(
             exerciseRepository,
+            assignmentRepository,
             userRepository,
             new ObjectMapper(),
             identityService
@@ -115,6 +120,7 @@ class CustomRehabExerciseServiceTest {
 
         service.delete("custom_1", 7L, TOKEN);
 
+        verify(assignmentRepository).deleteAllByCustomExercise_Id("custom_1");
         verify(exerciseRepository).delete(entity);
     }
 

@@ -13,6 +13,17 @@ public interface UserBindingRepository
         Long linkedUserId
     );
 
+    boolean existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(
+        Long patientId,
+        Long linkedUserId,
+        String relationship
+    );
+
+    List<UserBinding> findAllByLinkedUser_IdAndRelationshipIgnoreCase(
+        Long linkedUserId,
+        String relationship
+    );
+
     List<UserBinding> findByPatient_IdOrLinkedUser_Id(
         Long patientId,
         Long linkedUserId
