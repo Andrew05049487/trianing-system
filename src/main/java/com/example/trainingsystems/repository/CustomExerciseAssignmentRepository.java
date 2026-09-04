@@ -33,5 +33,11 @@ public interface CustomExerciseAssignmentRepository
         Sort sort
     );
 
+    List<CustomExerciseAssignmentEntity>
+        findAllByPatient_IdAndAssignedByTherapist_IdAndActiveTrue(
+            Long patientId,
+            Long therapistId
+        );
+
     void deleteAllByCustomExercise_Id(String exerciseId);
 }

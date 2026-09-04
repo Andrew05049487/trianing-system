@@ -13,7 +13,9 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice(assignableTypes = {
     CustomRehabExerciseController.class,
     CustomExerciseAssignmentController.class,
-    PatientCustomExerciseController.class
+    PatientCustomExerciseController.class,
+    UnifiedExerciseAssignmentController.class,
+    PatientAssignedExerciseController.class
 })
 public class CustomExerciseExceptionHandler {
 
