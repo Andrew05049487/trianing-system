@@ -40,4 +40,9 @@ public interface CustomExerciseAssignmentRepository
         );
 
     void deleteAllByCustomExercise_Id(String exerciseId);
+
+    void deleteAllByPatient_IdAndAssignedByTherapist_Id(
+        Long patientId,
+        Long therapistId
+    );
 }

@@ -25,4 +25,9 @@ public interface ExerciseAssignmentRepository
         Long patientId,
         Sort sort
     );
+
+    void deleteAllByPatient_IdAndAssignedByTherapist_Id(
+        Long patientId,
+        Long therapistId
+    );
 }

@@ -42,10 +42,17 @@ public class BindingController {
         String relationship =
                 request.getRelationship().trim().toUpperCase(Locale.ROOT);
 
-        if (!relationship.equals("THERAPIST")
-                && !relationship.equals("FAMILY")) {
+        if (relationship.equals("THERAPIST")) {
+            return ResponseEntity.status(403)
+                    .body(Map.of(
+                            "message",
+                            "治療師綁定必須使用具 HMAC 身分驗證的患者管理 API"
+                    ));
+        }
+
+        if (!relationship.equals("FAMILY")) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "關係必須是 THERAPIST 或 FAMILY"));
+                    .body(Map.of("message", "關係必須是 FAMILY"));
         }
 
         User patient = userRepository
