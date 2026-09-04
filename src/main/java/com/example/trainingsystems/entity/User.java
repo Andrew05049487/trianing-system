@@ -1,7 +1,9 @@
 package com.example.trainingsystems.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.ToString;
 
 @Entity
 @Table(name = "users")
@@ -15,8 +17,16 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
-    @Column(nullable = false)
+    // Nullable for Google-only patient accounts.
+    @Column
+    @JsonIgnore
+    @ToString.Exclude
     private String password;
+
+    @Column(name = "google_subject", length = 255)
+    @JsonIgnore
+    @ToString.Exclude
+    private String googleSubject;
 
     private String name;
 
