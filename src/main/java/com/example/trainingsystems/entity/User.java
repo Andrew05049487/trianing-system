@@ -17,6 +17,9 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @Column(name = "account_id", length = 20)
+    private String accountId;
+
     // Nullable for Google-only patient accounts.
     @Column
     @JsonIgnore

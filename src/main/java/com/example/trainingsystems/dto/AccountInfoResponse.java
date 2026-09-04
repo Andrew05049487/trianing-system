@@ -1,7 +1,6 @@
 package com.example.trainingsystems.dto;
 
-public record AuthLoginResponse(
-    String message,
+public record AccountInfoResponse(
     Long userId,
     String name,
     String email,
@@ -9,7 +8,8 @@ public record AuthLoginResponse(
     String role,
     String bindingCode,
     String friendCode,
-    String customExerciseToken,
-    boolean googleLinked
+    boolean googleLinked,
+    String googleEmail,
+    boolean hasPassword
 ) {
 }

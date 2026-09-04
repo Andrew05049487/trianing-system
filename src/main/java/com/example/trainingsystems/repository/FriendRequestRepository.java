@@ -18,4 +18,6 @@ public interface FriendRequestRepository
         Long receiverId,
         String status
     );
+
+    List<FriendRequest> findBySenderIdOrReceiverId(Long senderId, Long receiverId);
 }

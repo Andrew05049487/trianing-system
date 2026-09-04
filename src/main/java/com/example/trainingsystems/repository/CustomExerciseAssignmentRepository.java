@@ -45,4 +45,9 @@ public interface CustomExerciseAssignmentRepository
         Long patientId,
         Long therapistId
     );
+
+    List<CustomExerciseAssignmentEntity> findAllByPatient_IdOrAssignedByTherapist_Id(
+        Long patientId,
+        Long therapistId
+    );
 }

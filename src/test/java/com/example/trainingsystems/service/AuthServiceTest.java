@@ -86,6 +86,20 @@ class AuthServiceTest {
     }
 
     @Test
+    void accountIdLoginIsCaseInsensitiveAndPreservesRole() {
+        User user = patient(7L, "person@example.com", passwordService.encode("secret1"));
+        user.setAccountId("rehab123");
+        when(userRepository.findByAccountId("rehab123")).thenReturn(Optional.of(user));
+
+        AuthLoginResponse response = authService.login(loginRequest("ReHab123", "secret1"));
+
+        assertEquals(7L, response.userId());
+        assertEquals("rehab123", response.accountId());
+        assertEquals("PATIENT", response.role());
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    @Test
     void wrongPasswordFails() {
         User user = patient(7L, "person@example.com", passwordService.encode("secret1"));
         when(userRepository.findByEmail("person@example.com")).thenReturn(Optional.of(user));
@@ -308,7 +322,7 @@ class AuthServiceTest {
 
     private LoginRequest loginRequest(String email, String password) {
         LoginRequest request = mock(LoginRequest.class);
-        when(request.getEmail()).thenReturn(email);
+        when(request.getIdentifier()).thenReturn(email);
         when(request.getPassword()).thenReturn(password);
         return request;
     }

@@ -6,10 +6,11 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice(assignableTypes = AuthController.class)
+@RestControllerAdvice(assignableTypes = {AuthController.class, AccountController.class})
 public class AuthExceptionHandler {
     @ExceptionHandler(AuthApiException.class)
     public ResponseEntity<AuthErrorResponse> handleAuthError(AuthApiException error) {
@@ -23,6 +24,13 @@ public class AuthExceptionHandler {
         return ResponseEntity
             .badRequest()
             .body(new AuthErrorResponse("INVALID_REQUEST", "請確認輸入資料格式"));
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<AuthErrorResponse> handleMissingIdentityHeader() {
+        return ResponseEntity
+            .status(HttpStatus.UNAUTHORIZED)
+            .body(new AuthErrorResponse("UNAUTHORIZED", "登入狀態已失效"));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

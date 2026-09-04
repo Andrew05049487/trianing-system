@@ -68,11 +68,12 @@ public class AuthService {
 
     @Transactional
     public AuthLoginResponse login(LoginRequest request) {
-        if (request == null || request.getEmail() == null || request.getPassword() == null) {
-            throw badRequest("INVALID_CREDENTIALS", "請輸入 Email 和密碼");
+        if (request == null || request.getIdentifier() == null || request.getPassword() == null) {
+            throw badRequest("INVALID_CREDENTIALS", "請輸入帳號和密碼");
         }
 
-        User user = userRepository.findByEmail(normalizeEmail(request.getEmail()))
+        String identifier = request.getIdentifier().trim();
+        User user = findByLoginIdentifier(identifier)
             .orElseThrow(this::invalidCredentials);
         PasswordService.PasswordMatch match = passwordService.verify(
             request.getPassword(),
@@ -181,6 +182,17 @@ public class AuthService {
         return email.trim().toLowerCase(Locale.ROOT);
     }
 
+    static String normalizeAccountId(String accountId) {
+        return accountId.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private Optional<User> findByLoginIdentifier(String identifier) {
+        if (identifier.contains("@")) {
+            return userRepository.findByEmail(normalizeEmail(identifier));
+        }
+        return userRepository.findByAccountId(normalizeAccountId(identifier));
+    }
+
     private void requirePatient(User user) {
         if (!PATIENT_ROLE.equalsIgnoreCase(user.getRole())) {
             throw new AuthApiException(
@@ -197,10 +209,12 @@ public class AuthService {
             user.getId(),
             user.getName(),
             user.getEmail(),
+            user.getAccountId(),
             user.getRole(),
             user.getBindingCode(),
             user.getFriendCode(),
-            identityService.issueToken(user)
+            identityService.issueToken(user),
+            user.getGoogleSubject() != null && !user.getGoogleSubject().isBlank()
         );
     }
 
