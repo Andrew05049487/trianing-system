@@ -4,6 +4,7 @@ import com.example.trainingsystems.dto.LoginRequest;
 import com.example.trainingsystems.dto.RegisterRequest;
 import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.repository.UserRepository;
+import com.example.trainingsystems.service.CustomExerciseIdentityService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,9 +20,14 @@ import java.util.UUID;
 public class AuthController {
 
     private final UserRepository userRepository;
+    private final CustomExerciseIdentityService customExerciseIdentityService;
 
-    public AuthController(UserRepository userRepository) {
+    public AuthController(
+        UserRepository userRepository,
+        CustomExerciseIdentityService customExerciseIdentityService
+    ) {
         this.userRepository = userRepository;
+        this.customExerciseIdentityService = customExerciseIdentityService;
     }
 
     /*
@@ -149,6 +155,10 @@ public class AuthController {
         result.put("role", user.getRole());
         result.put("bindingCode", user.getBindingCode());
         result.put("friendCode", user.getFriendCode());
+        result.put(
+            "customExerciseToken",
+            customExerciseIdentityService.issueToken(user)
+        );
 
         return ResponseEntity.ok(result);
     }
