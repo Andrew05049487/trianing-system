@@ -28,7 +28,12 @@ class CustomRehabExerciseDtoJsonTest {
                 {"id":"kf_001","time":0.0,"jointRotations":{"rightShoulder":{"x":1.0,"y":2.0,"z":3.0}}},
                 {"id":"kf_002","time":1.0,"jointRotations":{"rightShoulder":{"x":4.0,"y":5.0,"z":6.0}}}
               ],
-              "evaluationRules":[]
+              "evaluationRules":[],
+              "poseMeasurementRules":[{
+                "measurement":"LEFT_ELBOW_ANGLE",
+                "targetAngleDegrees":90.0,
+                "toleranceDegrees":10.0
+              }]
             }
             """;
 
@@ -46,5 +51,7 @@ class CustomRehabExerciseDtoJsonTest {
         assertThat(decoded.getCreatedByTherapistId()).isEqualTo("7");
         assertThat(decoded.getKeyframes()).isEqualTo(dto.getKeyframes());
         assertThat(decoded.getEvaluationRules()).isEqualTo(dto.getEvaluationRules());
+        assertThat(decoded.getPoseMeasurementRules())
+            .isEqualTo(dto.getPoseMeasurementRules());
     }
 }

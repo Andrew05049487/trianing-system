@@ -37,6 +37,12 @@ public class CustomRehabExerciseService {
         "leftAnkle",
         "rightAnkle"
     );
+    private static final Set<String> POSE_MEASUREMENTS = Set.of(
+        "LEFT_ELBOW_ANGLE",
+        "RIGHT_ELBOW_ANGLE",
+        "LEFT_KNEE_ANGLE",
+        "RIGHT_KNEE_ANGLE"
+    );
 
     private final CustomRehabExerciseRepository exerciseRepository;
     private final CustomExerciseAssignmentRepository assignmentRepository;
@@ -95,6 +101,11 @@ public class CustomRehabExerciseService {
         entity.setDuration(request.getDuration());
         entity.setKeyframesJson(writeJson(request.getKeyframes()));
         entity.setEvaluationRulesJson(writeJson(request.getEvaluationRules()));
+        entity.setPoseMeasurementRulesJson(writeJson(
+            request.getPoseMeasurementRules() == null
+                ? objectMapper.createArrayNode()
+                : request.getPoseMeasurementRules()
+        ));
 
         return toDto(exerciseRepository.save(entity));
     }
@@ -201,6 +212,58 @@ public class CustomRehabExerciseService {
             || !request.getEvaluationRules().isArray()) {
             throw badRequest("evaluationRules 必須是陣列");
         }
+        validatePoseMeasurementRules(request.getPoseMeasurementRules());
+    }
+
+    private void validatePoseMeasurementRules(JsonNode rules) {
+        if (rules == null || rules.isNull()) {
+            return;
+        }
+        if (!rules.isArray()) {
+            throw badRequest("poseMeasurementRules 必須是陣列");
+        }
+        Set<String> measurements = new HashSet<>();
+        for (JsonNode rule : rules) {
+            if (!rule.isObject()) {
+                throw badRequest("姿勢評估規則必須是 JSON object");
+            }
+            JsonNode measurementNode = rule.get("measurement");
+            if (measurementNode == null || !measurementNode.isTextual()) {
+                throw badRequest("姿勢評估 measurement 不可為空");
+            }
+            String measurement = measurementNode.asText();
+            if (!POSE_MEASUREMENTS.contains(measurement)) {
+                throw badRequest("不支援的姿勢評估 measurement");
+            }
+            if (!measurements.add(measurement)) {
+                throw badRequest("同一 measurement 不可重複設定");
+            }
+            double target = requireJsonFiniteNumber(
+                rule.get("targetAngleDegrees"),
+                "targetAngleDegrees"
+            );
+            double tolerance = requireJsonFiniteNumber(
+                rule.get("toleranceDegrees"),
+                "toleranceDegrees"
+            );
+            if (target < 0 || target > 180) {
+                throw badRequest("targetAngleDegrees 必須介於 0 到 180");
+            }
+            if (tolerance <= 0) {
+                throw badRequest("toleranceDegrees 必須大於 0");
+            }
+            if (target - tolerance < 0 || target + tolerance > 180) {
+                throw badRequest("姿勢評估有效角度範圍不可超出 0 到 180");
+            }
+            validateOptionalText(rule.get("feedbackTooLow"), "feedbackTooLow");
+            validateOptionalText(rule.get("feedbackTooHigh"), "feedbackTooHigh");
+        }
+    }
+
+    private void validateOptionalText(JsonNode node, String field) {
+        if (node != null && !node.isNull() && !node.isTextual()) {
+            throw badRequest(field + " 必須是文字");
+        }
     }
 
     private void validateKeyframes(JsonNode keyframes, double duration) {
@@ -286,6 +349,9 @@ public class CustomRehabExerciseService {
         dto.setDuration(entity.getDuration());
         dto.setKeyframes(readJson(entity.getKeyframesJson()));
         dto.setEvaluationRules(readJson(entity.getEvaluationRulesJson()));
+        dto.setPoseMeasurementRules(readJsonArrayOrEmpty(
+            entity.getPoseMeasurementRulesJson()
+        ));
         return dto;
     }
 
@@ -306,6 +372,16 @@ public class CustomRehabExerciseService {
                 "已儲存的自訂動作 JSON 格式錯誤"
             );
         }
+    }
+
+    private JsonNode readJsonArrayOrEmpty(String value) {
+        if (value == null || value.isBlank()) {
+            return objectMapper.createArrayNode();
+        }
+        JsonNode parsed = readJson(value);
+        return parsed != null && parsed.isArray()
+            ? parsed
+            : objectMapper.createArrayNode();
     }
 
     private CustomExerciseApiException badRequest(String message) {

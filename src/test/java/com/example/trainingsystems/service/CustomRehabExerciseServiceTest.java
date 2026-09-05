@@ -190,6 +190,105 @@ class CustomRehabExerciseServiceTest {
             .isEqualTo(request.getKeyframes());
     }
 
+    @Test
+    void savesAndReturnsPoseMeasurementRules() throws Exception {
+        CustomRehabExerciseDto request = validRequest("custom_1");
+        request.setPoseMeasurementRules(new ObjectMapper().readTree("""
+            [{
+              "measurement":"LEFT_ELBOW_ANGLE",
+              "targetAngleDegrees":90,
+              "toleranceDegrees":10,
+              "feedbackTooLow":"請增加左手肘角度",
+              "feedbackTooHigh":"請減少左手肘角度"
+            }]
+            """));
+        when(exerciseRepository.findById("custom_1")).thenReturn(Optional.empty());
+        when(exerciseRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+
+        CustomRehabExerciseDto saved = service.save("custom_1", 7L, TOKEN, request);
+
+        assertThat(saved.getPoseMeasurementRules())
+            .isEqualTo(request.getPoseMeasurementRules());
+    }
+
+    @Test
+    void updatingAndDeletingAllPoseMeasurementRulesPersistsEmptyArray()
+        throws Exception {
+        CustomRehabExerciseEntity existing = entity("custom_1", therapist);
+        existing.setPoseMeasurementRulesJson("""
+            [{"measurement":"LEFT_ELBOW_ANGLE","targetAngleDegrees":90,"toleranceDegrees":10}]
+            """);
+        when(exerciseRepository.findById("custom_1"))
+            .thenReturn(Optional.of(existing));
+        when(exerciseRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+        CustomRehabExerciseDto request = validRequest("custom_1");
+        request.setPoseMeasurementRules(new ObjectMapper().readTree("[]"));
+
+        CustomRehabExerciseDto saved = service.save("custom_1", 7L, TOKEN, request);
+
+        assertThat(saved.getPoseMeasurementRules()).isEmpty();
+        assertThat(existing.getPoseMeasurementRulesJson()).isEqualTo("[]");
+    }
+
+    @Test
+    void legacyNullPoseMeasurementJsonReturnsEmptyArray() {
+        CustomRehabExerciseEntity legacy = entity("custom_1", therapist);
+        legacy.setPoseMeasurementRulesJson(null);
+        when(exerciseRepository.findByIdAndCreatedByTherapist_Id("custom_1", 7L))
+            .thenReturn(Optional.of(legacy));
+
+        assertThat(service.get("custom_1", 7L, TOKEN).getPoseMeasurementRules())
+            .isEmpty();
+    }
+
+    @Test
+    void unsupportedPoseMeasurementIsRejected() {
+        assertInvalidPoseRules("""
+            [{"measurement":"LEFT_SHOULDER_ANGLE","targetAngleDegrees":90,"toleranceDegrees":10}]
+            """);
+    }
+
+    @Test
+    void invalidPoseTargetIsRejected() {
+        assertInvalidPoseRules("""
+            [{"measurement":"LEFT_ELBOW_ANGLE","targetAngleDegrees":-1,"toleranceDegrees":10}]
+            """);
+    }
+
+    @Test
+    void invalidPoseToleranceAndRangeAreRejected() {
+        assertInvalidPoseRules("""
+            [{"measurement":"LEFT_ELBOW_ANGLE","targetAngleDegrees":90,"toleranceDegrees":0}]
+            """);
+        assertInvalidPoseRules("""
+            [{"measurement":"RIGHT_KNEE_ANGLE","targetAngleDegrees":175,"toleranceDegrees":10}]
+            """);
+    }
+
+    @Test
+    void duplicatePoseMeasurementIsRejected() {
+        assertInvalidPoseRules("""
+            [
+              {"measurement":"LEFT_ELBOW_ANGLE","targetAngleDegrees":90,"toleranceDegrees":10},
+              {"measurement":"LEFT_ELBOW_ANGLE","targetAngleDegrees":120,"toleranceDegrees":5}
+            ]
+            """);
+    }
+
+    private void assertInvalidPoseRules(String json) {
+        try {
+            CustomRehabExerciseDto request = validRequest("custom_1");
+            request.setPoseMeasurementRules(new ObjectMapper().readTree(json));
+            assertStatus(
+                () -> service.save("custom_1", 7L, TOKEN, request),
+                HttpStatus.BAD_REQUEST
+            );
+            verify(exerciseRepository, never()).save(any());
+        } catch (Exception error) {
+            throw new IllegalStateException(error);
+        }
+    }
+
     private void assertStatus(Runnable action, HttpStatus status) {
         assertThatThrownBy(action::run)
             .isInstanceOf(CustomExerciseApiException.class)
@@ -219,6 +318,7 @@ class CustomRehabExerciseServiceTest {
                 ]
                 """));
             dto.setEvaluationRules(mapper.readTree("[]"));
+            dto.setPoseMeasurementRules(mapper.readTree("[]"));
             return dto;
         } catch (Exception error) {
             throw new IllegalStateException(error);
@@ -241,6 +341,9 @@ class CustomRehabExerciseServiceTest {
         entity.setDuration(request.getDuration());
         entity.setKeyframesJson(request.getKeyframes().toString());
         entity.setEvaluationRulesJson(request.getEvaluationRules().toString());
+        entity.setPoseMeasurementRulesJson(
+            request.getPoseMeasurementRules().toString()
+        );
         return entity;
     }
 

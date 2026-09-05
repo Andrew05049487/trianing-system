@@ -10,6 +10,7 @@ import com.example.trainingsystems.repository.CustomExerciseAssignmentRepository
 import com.example.trainingsystems.repository.CustomRehabExerciseRepository;
 import com.example.trainingsystems.repository.UserBindingRepository;
 import com.example.trainingsystems.repository.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -194,7 +195,7 @@ class CustomExerciseAssignmentServiceTest {
     }
 
     @Test
-    void patientListsOnlyOwnAssignedExercises() {
+    void patientListsOnlyOwnAssignedExercises() throws Exception {
         authenticate(patient);
         CustomExerciseAssignmentEntity assignment = assignment(
             101L,
@@ -204,15 +205,21 @@ class CustomExerciseAssignmentServiceTest {
         );
         CustomRehabExerciseDto dto = new CustomRehabExerciseDto();
         dto.setId("custom_1");
+        dto.setPoseMeasurementRules(new ObjectMapper().readTree("""
+            [{"measurement":"LEFT_ELBOW_ANGLE","targetAngleDegrees":90,"toleranceDegrees":10}]
+            """));
         when(assignmentRepository.findAllByPatient_IdAndActiveTrue(
             eq(15L),
             any(Sort.class)
         )).thenReturn(List.of(assignment));
         when(exerciseService.toDto(exercise)).thenReturn(dto);
 
-        assertThat(service.getPatientExercises(15L, TOKEN))
-            .extracting(CustomRehabExerciseDto::getId)
+        List<CustomRehabExerciseDto> result =
+            service.getPatientExercises(15L, TOKEN);
+        assertThat(result).extracting(CustomRehabExerciseDto::getId)
             .containsExactly("custom_1");
+        assertThat(result.get(0).getPoseMeasurementRules())
+            .isEqualTo(dto.getPoseMeasurementRules());
         verify(assignmentRepository).findAllByPatient_IdAndActiveTrue(
             eq(15L),
             any(Sort.class)
