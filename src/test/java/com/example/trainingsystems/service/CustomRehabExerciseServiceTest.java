@@ -212,6 +212,49 @@ class CustomRehabExerciseServiceTest {
     }
 
     @Test
+    void acceptsDirectionalShoulderPoseMeasurements() throws Exception {
+        CustomRehabExerciseDto request = validRequest("custom_1");
+        request.setPoseMeasurementRules(new ObjectMapper().readTree("""
+            [
+              {
+                "measurement":"LEFT_SHOULDER_ABDUCTION",
+                "targetAngleDegrees":90,
+                "toleranceDegrees":10
+              },
+              {
+                "measurement":"RIGHT_SHOULDER_ABDUCTION",
+                "targetAngleDegrees":90,
+                "toleranceDegrees":10
+              },
+              {
+                "measurement":"LEFT_SHOULDER_FLEXION",
+                "targetAngleDegrees":90,
+                "toleranceDegrees":10
+              },
+              {
+                "measurement":"RIGHT_SHOULDER_FLEXION",
+                "targetAngleDegrees":90,
+                "toleranceDegrees":10
+              }
+            ]
+            """));
+        when(exerciseRepository.findById("custom_1"))
+            .thenReturn(Optional.empty());
+        when(exerciseRepository.save(any()))
+            .thenAnswer(call -> call.getArgument(0));
+
+        CustomRehabExerciseDto saved = service.save(
+            "custom_1",
+            7L,
+            TOKEN,
+            request
+        );
+
+        assertThat(saved.getPoseMeasurementRules())
+            .isEqualTo(request.getPoseMeasurementRules());
+    }
+
+    @Test
     void updatingAndDeletingAllPoseMeasurementRulesPersistsEmptyArray()
         throws Exception {
         CustomRehabExerciseEntity existing = entity("custom_1", therapist);

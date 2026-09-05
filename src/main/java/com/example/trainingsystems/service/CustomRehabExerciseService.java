@@ -41,7 +41,11 @@ public class CustomRehabExerciseService {
         "LEFT_ELBOW_ANGLE",
         "RIGHT_ELBOW_ANGLE",
         "LEFT_KNEE_ANGLE",
-        "RIGHT_KNEE_ANGLE"
+        "RIGHT_KNEE_ANGLE",
+        "LEFT_SHOULDER_ABDUCTION",
+        "RIGHT_SHOULDER_ABDUCTION",
+        "LEFT_SHOULDER_FLEXION",
+        "RIGHT_SHOULDER_FLEXION"
     );
 
     private final CustomRehabExerciseRepository exerciseRepository;
