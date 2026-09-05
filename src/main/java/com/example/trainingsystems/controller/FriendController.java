@@ -3,7 +3,6 @@ package com.example.trainingsystems.controller;
 import com.example.trainingsystems.dto.FriendRequestCreateDto;
 import com.example.trainingsystems.dto.FriendRequestRespondDto;
 import com.example.trainingsystems.service.FriendService;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,12 +33,7 @@ public class FriendController {
                 friendService.sendRequest(requestDto)
             );
         } catch (IllegalArgumentException exception) {
-            return ResponseEntity
-                .badRequest()
-                .body(Map.of(
-                    "message",
-                    exception.getMessage()
-                ));
+            return badRequest(exception);
         }
     }
 
@@ -57,12 +51,7 @@ public class FriendController {
                 friendService.getPendingRequests(receiverId)
             );
         } catch (IllegalArgumentException exception) {
-            return ResponseEntity
-                .badRequest()
-                .body(Map.of(
-                    "message",
-                    exception.getMessage()
-                ));
+            return badRequest(exception);
         }
     }
 
@@ -84,12 +73,29 @@ public class FriendController {
                 )
             );
         } catch (IllegalArgumentException exception) {
-            return ResponseEntity
-                .badRequest()
-                .body(Map.of(
-                    "message",
-                    exception.getMessage()
-                ));
+            return badRequest(exception);
+        }
+    }
+
+    /*
+     * 取消自己送出的待處理邀請
+     *
+     * DELETE /api/friends/requests/{requestId}?senderId=1
+     */
+    @DeleteMapping("/requests/{requestId}")
+    public ResponseEntity<?> cancelRequest(
+        @PathVariable Long requestId,
+        @RequestParam Long senderId
+    ) {
+        try {
+            return ResponseEntity.ok(
+                friendService.cancelRequest(
+                    requestId,
+                    senderId
+                )
+            );
+        } catch (IllegalArgumentException exception) {
+            return badRequest(exception);
         }
     }
 
@@ -107,12 +113,40 @@ public class FriendController {
                 friendService.getFriends(userId)
             );
         } catch (IllegalArgumentException exception) {
-            return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(Map.of(
-                    "message",
-                    exception.getMessage()
-                ));
+            return badRequest(exception);
         }
+    }
+
+    /*
+     * 刪除好友
+     *
+     * DELETE /api/friends/{userId}/{friendId}
+     */
+    @DeleteMapping("/{userId}/{friendId}")
+    public ResponseEntity<?> removeFriend(
+        @PathVariable Long userId,
+        @PathVariable Long friendId
+    ) {
+        try {
+            return ResponseEntity.ok(
+                friendService.removeFriend(
+                    userId,
+                    friendId
+                )
+            );
+        } catch (IllegalArgumentException exception) {
+            return badRequest(exception);
+        }
+    }
+
+    private ResponseEntity<Map<String, String>> badRequest(
+        IllegalArgumentException exception
+    ) {
+        return ResponseEntity
+            .badRequest()
+            .body(Map.of(
+                "message",
+                exception.getMessage()
+            ));
     }
 }
