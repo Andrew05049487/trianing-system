@@ -14,8 +14,14 @@ public interface FriendRequestRepository
         Long receiverId
     );
 
-    List<FriendRequest> findByReceiverIdAndStatusOrderByCreatedAtDesc(
-        Long receiverId,
-        String status
+    List<FriendRequest>
+        findByReceiverIdAndStatusOrderByCreatedAtDesc(
+            Long receiverId,
+            String status
+        );
+
+    List<FriendRequest> findBySenderIdOrReceiverId(
+        Long senderId,
+        Long receiverId
     );
 }

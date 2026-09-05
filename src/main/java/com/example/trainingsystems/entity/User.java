@@ -12,22 +12,47 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(
+        nullable = false,
+        unique = true
+    )
     private String email;
 
-    @Column(nullable = false)
+    @Column
     private String password;
 
     private String name;
 
     private String goal;
 
-    @Column(nullable = false, length = 20)
+    @Column(
+        nullable = false,
+        length = 20
+    )
     private String role = "PATIENT";
 
-    @Column(name = "binding_code", length = 12)
+    @Column(
+        name = "binding_code",
+        length = 12
+    )
     private String bindingCode;
 
-    @Column(name = "friend_code", unique = true, length = 12)
+    @Column(
+        name = "friend_code",
+        unique = true,
+        length = 12
+    )
     private String friendCode;
+
+    @Column(
+        name = "account_id",
+        length = 50
+    )
+    private String accountId;
+
+    @Column(
+        name = "google_subject",
+        length = 255
+    )
+    private String googleSubject;
 }

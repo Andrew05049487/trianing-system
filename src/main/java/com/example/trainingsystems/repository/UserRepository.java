@@ -5,11 +5,16 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
-public interface UserRepository extends JpaRepository<User, Long> {
+public interface UserRepository
+        extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
     Optional<User> findByBindingCode(String bindingCode);
 
     Optional<User> findByFriendCode(String friendCode);
+
+    Optional<User> findByAccountId(String accountId);
+
+    Optional<User> findByGoogleSubject(String googleSubject);
 }
