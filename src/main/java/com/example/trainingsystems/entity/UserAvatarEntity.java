@@ -2,6 +2,8 @@ package com.example.trainingsystems.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
@@ -25,6 +27,10 @@ public class UserAvatarEntity {
         columnDefinition = "VARBINARY(MAX)"
     )
     private byte[] imageData;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type", nullable = false, length = 16)
+    private UserAvatarSourceType sourceType;
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
@@ -53,6 +59,14 @@ public class UserAvatarEntity {
 
     public byte[] getImageData() {
         return imageData;
+    }
+
+    public UserAvatarSourceType getSourceType() {
+        return sourceType;
+    }
+
+    public void setSourceType(UserAvatarSourceType sourceType) {
+        this.sourceType = sourceType;
     }
 
     public void setImageData(byte[] imageData) {

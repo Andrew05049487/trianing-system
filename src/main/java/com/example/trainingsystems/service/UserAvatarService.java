@@ -2,6 +2,7 @@ package com.example.trainingsystems.service;
 
 import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.entity.UserAvatarEntity;
+import com.example.trainingsystems.entity.UserAvatarSourceType;
 import com.example.trainingsystems.repository.FriendshipRepository;
 import com.example.trainingsystems.repository.UserAvatarRepository;
 import com.example.trainingsystems.repository.UserBindingRepository;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.Locale;
 
 @Service
@@ -47,6 +49,34 @@ public class UserAvatarService {
         MultipartFile file
     ) {
         User user = requireCurrentUser(userId, identityToken);
+        ValidatedAvatar validated = validate(file);
+        saveAvatar(user.getId(), validated, UserAvatarSourceType.CUSTOM);
+    }
+
+    @Transactional
+    public void uploadGoogleAvatar(
+        Long userId,
+        String identityToken,
+        MultipartFile file
+    ) {
+        User user = requireCurrentUser(userId, identityToken);
+        ValidatedAvatar validated = validate(file);
+        UserAvatarEntity existing = avatarRepository
+            .findById(user.getId())
+            .orElse(null);
+        if (existing != null &&
+            existing.getSourceType() != UserAvatarSourceType.GOOGLE) {
+            return;
+        }
+        saveAvatar(
+            user.getId(),
+            validated,
+            UserAvatarSourceType.GOOGLE,
+            existing
+        );
+    }
+
+    private ValidatedAvatar validate(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw badRequest("AVATAR_EMPTY", "請選擇有效的圖片檔案");
         }
@@ -71,13 +101,35 @@ public class UserAvatarService {
             throw unsupported("圖片內容與檔案格式不符");
         }
 
+        return new ValidatedAvatar(mimeType, imageData);
+    }
+
+    private void saveAvatar(
+        Long userId,
+        ValidatedAvatar validated,
+        UserAvatarSourceType sourceType
+    ) {
         UserAvatarEntity avatar = avatarRepository
-            .findById(user.getId())
+            .findById(userId)
             .orElseGet(UserAvatarEntity::new);
-        avatar.setUserId(user.getId());
-        avatar.setMimeType(mimeType);
-        avatar.setImageData(imageData);
-        avatarRepository.save(avatar);
+        saveAvatar(userId, validated, sourceType, avatar);
+    }
+
+    private void saveAvatar(
+        Long userId,
+        ValidatedAvatar validated,
+        UserAvatarSourceType sourceType,
+        UserAvatarEntity avatar
+    ) {
+        UserAvatarEntity target = avatar == null
+            ? new UserAvatarEntity()
+            : avatar;
+        target.setUserId(userId);
+        target.setMimeType(validated.mimeType());
+        target.setImageData(validated.imageData());
+        target.setSourceType(sourceType);
+        target.setUpdatedAt(LocalDateTime.now());
+        avatarRepository.save(target);
     }
 
     @Transactional(readOnly = true)
@@ -232,5 +284,8 @@ public class UserAvatarService {
     }
 
     public record AvatarContent(byte[] bytes, String mimeType) {
+    }
+
+    private record ValidatedAvatar(String mimeType, byte[] imageData) {
     }
 }

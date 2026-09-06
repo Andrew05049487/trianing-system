@@ -2,16 +2,19 @@ package com.example.trainingsystems.service;
 
 import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.entity.UserAvatarEntity;
+import com.example.trainingsystems.entity.UserAvatarSourceType;
 import com.example.trainingsystems.repository.FriendshipRepository;
 import com.example.trainingsystems.repository.UserAvatarRepository;
 import com.example.trainingsystems.repository.UserBindingRepository;
 import com.example.trainingsystems.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -102,6 +106,115 @@ class UserAvatarServiceTest {
         assertEquals("image/png", existing.getMimeType());
         assertArrayEquals(png(), existing.getImageData());
         assertEquals(1L, existing.getUserId());
+        assertEquals(UserAvatarSourceType.CUSTOM, existing.getSourceType());
+    }
+
+    @Test
+    void repeatedCustomUploadsKeepOneRowAndFinishWithThirdImage() {
+        User patient = user(1L, "PATIENT");
+        authenticate(patient);
+        UserAvatarEntity existing = avatar(1L, "image/jpeg", jpeg());
+        existing.setSourceType(UserAvatarSourceType.GOOGLE);
+        existing.setUpdatedAt(LocalDateTime.of(2020, 1, 1, 0, 0));
+        when(avatars.findById(1L)).thenReturn(Optional.of(existing));
+        byte[] first = jpeg(1);
+        byte[] second = jpeg(2);
+        byte[] third = jpeg(3);
+
+        upload("image/jpeg", first);
+        upload("image/jpeg", second);
+        upload("image/jpeg", third);
+
+        verify(avatars, times(3)).save(existing);
+        assertArrayEquals(third, existing.getImageData());
+        assertEquals(UserAvatarSourceType.CUSTOM, existing.getSourceType());
+        assertEquals(1L, existing.getUserId());
+        assertEquals(true, existing.getUpdatedAt().isAfter(
+            LocalDateTime.of(2020, 1, 1, 0, 0)
+        ));
+    }
+
+    @Test
+    void GoogleAvatarCreatesAndUpdatesOnlyGoogleSource() {
+        User patient = user(1L, "PATIENT");
+        authenticate(patient);
+        UserAvatarEntity existing = avatar(1L, "image/jpeg", jpeg(1));
+        existing.setSourceType(UserAvatarSourceType.GOOGLE);
+        when(avatars.findById(1L))
+            .thenReturn(Optional.empty())
+            .thenReturn(Optional.of(existing));
+
+        service.uploadGoogleAvatar(1L, "token", file("image/png", png()));
+        service.uploadGoogleAvatar(1L, "token", file("image/jpeg", jpeg(2)));
+
+        ArgumentCaptor<UserAvatarEntity> saved = ArgumentCaptor.forClass(
+            UserAvatarEntity.class
+        );
+        verify(avatars, times(2)).save(saved.capture());
+        assertEquals(
+            UserAvatarSourceType.GOOGLE,
+            saved.getAllValues().get(0).getSourceType()
+        );
+        assertArrayEquals(png(), saved.getAllValues().get(0).getImageData());
+        assertEquals(UserAvatarSourceType.GOOGLE, existing.getSourceType());
+        assertArrayEquals(jpeg(2), existing.getImageData());
+    }
+
+    @Test
+    void GoogleAvatarAcceptsSupportedTypesAndRejectsInvalidInput() {
+        User patient = user(1L, "PATIENT");
+        authenticate(patient);
+        when(avatars.findById(1L)).thenReturn(Optional.empty());
+
+        googleUpload("image/jpeg", jpeg());
+        googleUpload("image/png", png());
+        googleUpload("image/webp", webp());
+        assertStatus(
+            HttpStatus.UNSUPPORTED_MEDIA_TYPE,
+            () -> googleUpload("image/gif", new byte[] {'G', 'I', 'F'})
+        );
+        assertStatus(
+            HttpStatus.PAYLOAD_TOO_LARGE,
+            () -> googleUpload(
+                "image/jpeg",
+                new byte[(int) UserAvatarService.MAX_IMAGE_BYTES + 1]
+            )
+        );
+
+        verify(avatars, times(3)).save(any(UserAvatarEntity.class));
+    }
+
+    @Test
+    void GoogleAvatarNeverOverwritesCustomAvatar() {
+        User patient = user(1L, "PATIENT");
+        authenticate(patient);
+        byte[] customBytes = jpeg(7);
+        UserAvatarEntity custom = avatar(1L, "image/jpeg", customBytes);
+        custom.setSourceType(UserAvatarSourceType.CUSTOM);
+        when(avatars.findById(1L)).thenReturn(Optional.of(custom));
+
+        googleUpload("image/png", png());
+
+        verify(avatars, never()).save(any());
+        assertEquals(UserAvatarSourceType.CUSTOM, custom.getSourceType());
+        assertArrayEquals(customBytes, custom.getImageData());
+    }
+
+    @Test
+    void invalidIdentityCannotUploadGoogleAvatar() {
+        User patient = user(1L, "PATIENT");
+        when(users.findById(1L)).thenReturn(Optional.of(patient));
+        when(identity.isValid(patient, "bad-token")).thenReturn(false);
+
+        assertStatus(
+            HttpStatus.FORBIDDEN,
+            () -> service.uploadGoogleAvatar(
+                1L,
+                "bad-token",
+                file("image/jpeg", jpeg())
+            )
+        );
+        verify(avatars, never()).save(any());
     }
 
     @Test
@@ -213,6 +326,10 @@ class UserAvatarServiceTest {
         service.uploadCurrentUserAvatar(1L, "token", file(mimeType, data));
     }
 
+    private void googleUpload(String mimeType, byte[] data) {
+        service.uploadGoogleAvatar(1L, "token", file(mimeType, data));
+    }
+
     private MockMultipartFile file(String mimeType, byte[] data) {
         return new MockMultipartFile("file", "avatar", mimeType, data);
     }
@@ -235,11 +352,18 @@ class UserAvatarServiceTest {
         avatar.setUserId(userId);
         avatar.setMimeType(mime);
         avatar.setImageData(data);
+        avatar.setSourceType(UserAvatarSourceType.CUSTOM);
         return avatar;
     }
 
     private byte[] jpeg() {
-        return new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x00};
+        return jpeg(0);
+    }
+
+    private byte[] jpeg(int marker) {
+        return new byte[] {
+            (byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) marker
+        };
     }
 
     private byte[] png() {

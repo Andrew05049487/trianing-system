@@ -52,4 +52,23 @@ class UserAvatarControllerTest {
         assertEquals("no-store", response.getHeaders().getCacheControl());
         assertArrayEquals(bytes, response.getBody());
     }
+
+    @Test
+    void GoogleUploadUsesDedicatedAuthenticatedEndpointServicePath() {
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "google-avatar.png",
+            "image/png",
+            new byte[] {(byte) 0x89, 0x50, 0x4E, 0x47}
+        );
+
+        ResponseEntity<Void> response = controller.uploadGoogleAvatar(
+            1L,
+            "token",
+            file
+        );
+
+        assertEquals(204, response.getStatusCode().value());
+        verify(service).uploadGoogleAvatar(1L, "token", file);
+    }
 }

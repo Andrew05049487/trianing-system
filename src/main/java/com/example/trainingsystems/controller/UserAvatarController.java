@@ -38,6 +38,22 @@ public class UserAvatarController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping(
+        value = "/account/avatar/google",
+        consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ResponseEntity<Void> uploadGoogleAvatar(
+        @RequestHeader(value = "X-User-Id", required = false) Long userId,
+        @RequestHeader(
+            value = "X-Custom-Exercise-Token",
+            required = false
+        ) String identityToken,
+        @RequestPart("file") MultipartFile file
+    ) {
+        service.uploadGoogleAvatar(userId, identityToken, file);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/users/{targetUserId}/avatar")
     public ResponseEntity<byte[]> getUserAvatar(
         @RequestHeader(value = "X-User-Id", required = false) Long viewerUserId,
