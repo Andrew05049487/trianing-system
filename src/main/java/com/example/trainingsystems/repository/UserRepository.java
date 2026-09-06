@@ -18,6 +18,8 @@ public interface UserRepository
 
     Optional<User> findByFriendCode(String friendCode);
 
+    Optional<User> findByFriendCodeIgnoreCase(String friendCode);
+
     Optional<User> findByAccountId(String accountId);
 
     Optional<User> findByGoogleSubject(String googleSubject);

@@ -4,9 +4,16 @@ import com.example.trainingsystems.dto.FriendRequestCreateDto;
 import com.example.trainingsystems.dto.FriendRequestRespondDto;
 import com.example.trainingsystems.service.FriendService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/friends")
@@ -19,134 +26,104 @@ public class FriendController {
         this.friendService = friendService;
     }
 
-    /*
-     * 送出好友邀請
-     *
-     * POST /api/friends/requests
-     */
     @PostMapping("/requests")
     public ResponseEntity<?> sendRequest(
-        @RequestBody FriendRequestCreateDto requestDto
+        @RequestHeader(value = "X-User-Id", required = false) Long userId,
+        @RequestHeader(
+            value = "X-Custom-Exercise-Token",
+            required = false
+        ) String identityToken,
+        @RequestBody(required = false) FriendRequestCreateDto requestDto
     ) {
-        try {
-            return ResponseEntity.ok(
-                friendService.sendRequest(requestDto)
-            );
-        } catch (IllegalArgumentException exception) {
-            return badRequest(exception);
-        }
+        return ResponseEntity.ok(
+            friendService.sendRequest(userId, identityToken, requestDto)
+        );
     }
 
-    /*
-     * 查看尚未處理的好友邀請
-     *
-     * GET /api/friends/requests/pending/{receiverId}
-     */
-    @GetMapping("/requests/pending/{receiverId}")
+    @GetMapping("/requests/pending")
     public ResponseEntity<?> getPendingRequests(
-        @PathVariable Long receiverId
+        @RequestHeader(value = "X-User-Id", required = false) Long userId,
+        @RequestHeader(
+            value = "X-Custom-Exercise-Token",
+            required = false
+        ) String identityToken
     ) {
-        try {
-            return ResponseEntity.ok(
-                friendService.getPendingRequests(receiverId)
-            );
-        } catch (IllegalArgumentException exception) {
-            return badRequest(exception);
-        }
+        return ResponseEntity.ok(
+            friendService.getPendingRequests(userId, identityToken)
+        );
     }
 
-    /*
-     * 接受或拒絕好友邀請
-     *
-     * PUT /api/friends/requests/{requestId}/respond
-     */
+    @GetMapping("/requests/sent")
+    public ResponseEntity<?> getSentRequests(
+        @RequestHeader(value = "X-User-Id", required = false) Long userId,
+        @RequestHeader(
+            value = "X-Custom-Exercise-Token",
+            required = false
+        ) String identityToken
+    ) {
+        return ResponseEntity.ok(
+            friendService.getSentRequests(userId, identityToken)
+        );
+    }
+
     @PutMapping("/requests/{requestId}/respond")
     public ResponseEntity<?> respondToRequest(
         @PathVariable Long requestId,
-        @RequestBody FriendRequestRespondDto responseDto
+        @RequestHeader(value = "X-User-Id", required = false) Long userId,
+        @RequestHeader(
+            value = "X-Custom-Exercise-Token",
+            required = false
+        ) String identityToken,
+        @RequestBody(required = false) FriendRequestRespondDto responseDto
     ) {
-        try {
-            return ResponseEntity.ok(
-                friendService.respondToRequest(
-                    requestId,
-                    responseDto
-                )
-            );
-        } catch (IllegalArgumentException exception) {
-            return badRequest(exception);
-        }
+        return ResponseEntity.ok(
+            friendService.respondToRequest(
+                userId,
+                identityToken,
+                requestId,
+                responseDto
+            )
+        );
     }
 
-    /*
-     * 取消自己送出的待處理邀請
-     *
-     * DELETE /api/friends/requests/{requestId}?senderId=1
-     */
     @DeleteMapping("/requests/{requestId}")
     public ResponseEntity<?> cancelRequest(
         @PathVariable Long requestId,
-        @RequestParam Long senderId
+        @RequestHeader(value = "X-User-Id", required = false) Long userId,
+        @RequestHeader(
+            value = "X-Custom-Exercise-Token",
+            required = false
+        ) String identityToken
     ) {
-        try {
-            return ResponseEntity.ok(
-                friendService.cancelRequest(
-                    requestId,
-                    senderId
-                )
-            );
-        } catch (IllegalArgumentException exception) {
-            return badRequest(exception);
-        }
+        return ResponseEntity.ok(
+            friendService.cancelRequest(userId, identityToken, requestId)
+        );
     }
 
-    /*
-     * 取得使用者的好友列表
-     *
-     * GET /api/friends/{userId}
-     */
-    @GetMapping("/{userId}")
+    @GetMapping
     public ResponseEntity<?> getFriends(
-        @PathVariable Long userId
+        @RequestHeader(value = "X-User-Id", required = false) Long userId,
+        @RequestHeader(
+            value = "X-Custom-Exercise-Token",
+            required = false
+        ) String identityToken
     ) {
-        try {
-            return ResponseEntity.ok(
-                friendService.getFriends(userId)
-            );
-        } catch (IllegalArgumentException exception) {
-            return badRequest(exception);
-        }
+        return ResponseEntity.ok(
+            friendService.getFriends(userId, identityToken)
+        );
     }
 
-    /*
-     * 刪除好友
-     *
-     * DELETE /api/friends/{userId}/{friendId}
-     */
-    @DeleteMapping("/{userId}/{friendId}")
+    @DeleteMapping("/{friendId}")
     public ResponseEntity<?> removeFriend(
-        @PathVariable Long userId,
-        @PathVariable Long friendId
+        @PathVariable Long friendId,
+        @RequestHeader(value = "X-User-Id", required = false) Long userId,
+        @RequestHeader(
+            value = "X-Custom-Exercise-Token",
+            required = false
+        ) String identityToken
     ) {
-        try {
-            return ResponseEntity.ok(
-                friendService.removeFriend(
-                    userId,
-                    friendId
-                )
-            );
-        } catch (IllegalArgumentException exception) {
-            return badRequest(exception);
-        }
-    }
-
-    private ResponseEntity<Map<String, String>> badRequest(
-        IllegalArgumentException exception
-    ) {
-        return ResponseEntity
-            .badRequest()
-            .body(Map.of(
-                "message",
-                exception.getMessage()
-            ));
+        return ResponseEntity.ok(
+            friendService.removeFriend(userId, identityToken, friendId)
+        );
     }
 }

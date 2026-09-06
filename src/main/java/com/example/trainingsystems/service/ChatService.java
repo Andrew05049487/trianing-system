@@ -78,6 +78,7 @@ public class ChatService {
                 .findByUserLowIdOrUserHighId(userId, userId)
                 .stream()
                 .map(friendship -> otherFriend(friendship, userId))
+                .filter(user -> hasRole(user, PATIENT))
                 .forEach(user -> addContact(
                     contacts,
                     user,
@@ -160,6 +161,7 @@ public class ChatService {
         return conversationRepository
             .findAllForUserOrderByUpdatedAtDesc(userId)
             .stream()
+            .filter(this::hasActiveRelationship)
             .map(this::toConversationDto)
             .toList();
     }
@@ -196,6 +198,7 @@ public class ChatService {
             conversationId,
             currentUser
         );
+        requireActivePeerFriendship(conversation);
         String text = normalizeMessage(rawText);
         Instant now = Instant.now();
 
@@ -240,6 +243,7 @@ public class ChatService {
         List<Long> conversationIds = conversationRepository
             .findAllForUserOrderByUpdatedAtDesc(userId)
             .stream()
+            .filter(this::hasActiveRelationship)
             .map(ChatConversationEntity::getId)
             .toList();
         if (conversationIds.isEmpty()) {
@@ -298,6 +302,32 @@ public class ChatService {
         return conversation;
     }
 
+    private void requireActivePeerFriendship(
+        ChatConversationEntity conversation
+    ) {
+        if (!hasActiveRelationship(conversation)) {
+            throw forbidden("解除好友後無法繼續傳送訊息");
+        }
+    }
+
+    private boolean hasActiveRelationship(
+        ChatConversationEntity conversation
+    ) {
+        if (conversation.getConversationType() != ChatConversationType.PEER) {
+            return true;
+        }
+        if (!hasRole(conversation.getParticipantOne(), PATIENT) ||
+            !hasRole(conversation.getParticipantTwo(), PATIENT)) {
+            return false;
+        }
+        long oneId = conversation.getParticipantOne().getId();
+        long twoId = conversation.getParticipantTwo().getId();
+        return friendshipRepository.existsByUserLowIdAndUserHighId(
+            Math.min(oneId, twoId),
+            Math.max(oneId, twoId)
+        );
+    }
+
     private void requireAllowedRelationship(
         User currentUser,
         User otherUser,
@@ -306,6 +336,10 @@ public class ChatService {
         long lowId = Math.min(currentUser.getId(), otherUser.getId());
         long highId = Math.max(currentUser.getId(), otherUser.getId());
         if (type == ChatConversationType.PEER) {
+            if (!hasRole(currentUser, PATIENT) ||
+                !hasRole(otherUser, PATIENT)) {
+                throw forbidden("病友聊天室僅限病患好友使用");
+            }
             if (!friendshipRepository.existsByUserLowIdAndUserHighId(
                 lowId,
                 highId

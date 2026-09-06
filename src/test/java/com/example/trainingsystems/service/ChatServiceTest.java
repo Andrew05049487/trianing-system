@@ -232,6 +232,8 @@ class ChatServiceTest {
         ChatConversationEntity conversation = conversation(patientA, patientB);
         when(conversationRepository.findById(50L))
             .thenReturn(Optional.of(conversation));
+        when(friendshipRepository.existsByUserLowIdAndUserHighId(1L, 2L))
+            .thenReturn(true);
         ChatMessageEntity older = message(
             1L,
             conversation,
@@ -358,6 +360,8 @@ class ChatServiceTest {
         ChatConversationEntity conversation = conversation(patientA, patientB);
         when(conversationRepository.findAllForUserOrderByUpdatedAtDesc(2L))
             .thenReturn(List.of(conversation));
+        when(friendshipRepository.existsByUserLowIdAndUserHighId(1L, 2L))
+            .thenReturn(true);
         ChatMessageRepository.UnreadCountView count = unreadCount(50L, 2L);
         when(messageRepository.countUnreadByConversationIds(List.of(50L), 2L))
             .thenReturn(List.of(count))
@@ -371,6 +375,25 @@ class ChatServiceTest {
 
         assertThat(before).extracting(UnreadCountDto::count).containsExactly(2L);
         assertThat(after).extracting(UnreadCountDto::count).containsExactly(0L);
+    }
+
+    @Test
+    void removedFriendshipCannotSendAndConversationIsNoLongerListed() {
+        authenticate(patientA);
+        ChatConversationEntity conversation = conversation(patientA, patientB);
+        when(conversationRepository.findById(50L))
+            .thenReturn(Optional.of(conversation));
+        when(conversationRepository.findAllForUserOrderByUpdatedAtDesc(1L))
+            .thenReturn(List.of(conversation));
+        when(friendshipRepository.existsByUserLowIdAndUserHighId(1L, 2L))
+            .thenReturn(false);
+
+        assertStatus(
+            () -> service.sendMessage(1L, TOKEN, 50L, "blocked"),
+            HttpStatus.FORBIDDEN
+        );
+        assertThat(service.getConversations(1L, TOKEN)).isEmpty();
+        verify(messageRepository, never()).save(any());
     }
 
     @Test

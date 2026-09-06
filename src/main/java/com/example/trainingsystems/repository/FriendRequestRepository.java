@@ -20,6 +20,12 @@ public interface FriendRequestRepository
             String status
         );
 
+    List<FriendRequest>
+        findBySenderIdAndStatusOrderByCreatedAtDesc(
+            Long senderId,
+            String status
+        );
+
     List<FriendRequest> findBySenderIdOrReceiverId(
         Long senderId,
         Long receiverId
