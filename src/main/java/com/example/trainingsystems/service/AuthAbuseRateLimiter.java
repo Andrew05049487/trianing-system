@@ -19,13 +19,14 @@ public class AuthAbuseRateLimiter {
     private static final Duration RESET_COOLDOWN = Duration.ofSeconds(60);
     private static final Duration RESET_WINDOW = Duration.ofHours(1);
     private static final int RESET_LIMIT = 5;
-    private static final Duration INVITE_WINDOW = Duration.ofMinutes(15);
-    private static final int INVITE_FAILURE_LIMIT = 5;
+    private static final Duration THERAPIST_REGISTRATION_WINDOW =
+        Duration.ofMinutes(15);
+    private static final int THERAPIST_REGISTRATION_LIMIT = 5;
 
     private final Clock clock;
     private final Map<String, Deque<Instant>> resetRequests =
         new ConcurrentHashMap<>();
-    private final Map<String, Deque<Instant>> inviteFailures =
+    private final Map<String, Deque<Instant>> therapistRegistrationRequests =
         new ConcurrentHashMap<>();
 
     public AuthAbuseRateLimiter(Clock clock) {
@@ -51,29 +52,19 @@ public class AuthAbuseRateLimiter {
         return true;
     }
 
-    public synchronized boolean isTherapistRegistrationBlocked(String sourceKey) {
-        String key = digest("therapist:" + sourceKey);
-        Deque<Instant> attempts = inviteFailures.get(key);
-        if (attempts == null) {
-            return false;
-        }
-        prune(attempts, clock.instant().minus(INVITE_WINDOW));
-        return attempts.size() >= INVITE_FAILURE_LIMIT;
-    }
-
-    public synchronized void recordTherapistInviteFailure(String sourceKey) {
+    public synchronized boolean allowTherapistRegistrationRequest(String sourceKey) {
         String key = digest("therapist:" + sourceKey);
         Instant now = clock.instant();
-        Deque<Instant> attempts = inviteFailures.computeIfAbsent(
+        Deque<Instant> attempts = therapistRegistrationRequests.computeIfAbsent(
             key,
             ignored -> new ArrayDeque<>()
         );
-        prune(attempts, now.minus(INVITE_WINDOW));
+        prune(attempts, now.minus(THERAPIST_REGISTRATION_WINDOW));
+        if (attempts.size() >= THERAPIST_REGISTRATION_LIMIT) {
+            return false;
+        }
         attempts.addLast(now);
-    }
-
-    public synchronized void clearTherapistInviteFailures(String sourceKey) {
-        inviteFailures.remove(digest("therapist:" + sourceKey));
+        return true;
     }
 
     private void prune(Deque<Instant> attempts, Instant cutoff) {

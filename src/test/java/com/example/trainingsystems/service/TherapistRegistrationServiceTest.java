@@ -5,6 +5,7 @@ import com.example.trainingsystems.dto.LoginRequest;
 import com.example.trainingsystems.dto.TherapistRegisterRequest;
 import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.repository.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -19,7 +20,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class TherapistRegistrationServiceTest {
-    private static final String INVITE = "test-therapist-invite";
     private UserRepository users;
     private PasswordService passwords;
     private CustomExerciseIdentityService identity;
@@ -40,7 +40,6 @@ class TherapistRegistrationServiceTest {
             users,
             passwords,
             identity,
-            new TherapistInviteVerifier(INVITE),
             new AuthAbuseRateLimiter(
                 Clock.fixed(Instant.parse("2026-09-06T02:00:00Z"), ZoneOffset.UTC)
             )
@@ -48,12 +47,12 @@ class TherapistRegistrationServiceTest {
     }
 
     @Test
-    void validInviteCreatesServerControlledTherapistWithBcrypt() {
+    void directRegistrationCreatesServerControlledTherapistWithBcrypt() {
         when(users.findByEmail("therapist@example.com"))
             .thenReturn(Optional.empty());
 
         AuthLoginResponse response = service.register(
-            request(" Therapist@Example.COM ", "secret1", INVITE),
+            request(" Therapist@Example.COM ", "secret1"),
             "127.0.0.1"
         );
 
@@ -74,7 +73,7 @@ class TherapistRegistrationServiceTest {
         when(users.findByEmail("therapist@example.com"))
             .thenReturn(Optional.empty());
         service.register(
-            request("therapist@example.com", "secret1", INVITE),
+            request("therapist@example.com", "secret1"),
             "127.0.0.1"
         );
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
@@ -100,20 +99,42 @@ class TherapistRegistrationServiceTest {
     }
 
     @Test
-    void invalidOrMissingInviteReturnsGenericError() {
-        for (String invite : new String[]{"wrong-invite", null}) {
-            AuthApiException error = assertThrows(
-                AuthApiException.class,
-                () -> service.register(
-                    request("therapist@example.com", "secret1", invite),
-                    "source-" + invite
-                )
-            );
-            assertEquals("INVALID_THERAPIST_REGISTRATION", error.getCode());
-            assertEquals("治療師註冊資訊無效", error.getMessage());
-            assertEquals(400, error.getStatus().value());
-        }
-        verify(users, never()).saveAndFlush(any());
+    void missingLegacyRegistrationSecretDoesNotDisableRegistration() {
+        when(users.findByEmail("therapist@example.com"))
+            .thenReturn(Optional.empty());
+
+        AuthLoginResponse response = service.register(
+            request("therapist@example.com", "secret1"),
+            "127.0.0.1"
+        );
+
+        assertEquals("THERAPIST", response.role());
+        verify(users).saveAndFlush(any(User.class));
+    }
+
+    @Test
+    void clientRoleAndLegacyInviteFieldsCannotChangeServerControlledRole()
+        throws Exception {
+        TherapistRegisterRequest request = new ObjectMapper().readValue(
+            """
+            {
+              "name": "治療師",
+              "email": "therapist@example.com",
+              "password": "secret1",
+              "role": "ADMIN",
+              "inviteCode": "legacy-value"
+            }
+            """,
+            TherapistRegisterRequest.class
+        );
+        when(users.findByEmail("therapist@example.com"))
+            .thenReturn(Optional.empty());
+
+        service.register(request, "127.0.0.2");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(users).saveAndFlush(captor.capture());
+        assertEquals("THERAPIST", captor.getValue().getRole());
     }
 
     @Test
@@ -127,7 +148,7 @@ class TherapistRegistrationServiceTest {
         AuthApiException error = assertThrows(
             AuthApiException.class,
             () -> service.register(
-                request("patient@example.com", "secret1", INVITE),
+                request("patient@example.com", "secret1"),
                 "127.0.0.1"
             )
         );
@@ -140,9 +161,9 @@ class TherapistRegistrationServiceTest {
     @Test
     void invalidFieldsUseSameGenericError() {
         for (TherapistRegisterRequest request : new TherapistRegisterRequest[]{
-            new TherapistRegisterRequest("", "x@example.com", "secret1", INVITE),
-            new TherapistRegisterRequest("Name", "", "secret1", INVITE),
-            new TherapistRegisterRequest("Name", "x@example.com", "short", INVITE)
+            new TherapistRegisterRequest("", "x@example.com", "secret1"),
+            new TherapistRegisterRequest("Name", "", "secret1"),
+            new TherapistRegisterRequest("Name", "x@example.com", "short")
         }) {
             AuthApiException error = assertThrows(
                 AuthApiException.class,
@@ -153,44 +174,32 @@ class TherapistRegistrationServiceTest {
     }
 
     @Test
-    void fiveInviteFailuresRateLimitFurtherAttempts() {
+    void fiveRegistrationAttemptsRateLimitFurtherAttempts() {
         String source = "10.0.0.1";
         for (int attempt = 0; attempt < 5; attempt++) {
-            assertThrows(
-                AuthApiException.class,
-                () -> service.register(
-                    request("t@example.com", "secret1", "wrong"),
-                    source
-                )
+            String email = "t" + attempt + "@example.com";
+            when(users.findByEmail(email)).thenReturn(Optional.empty());
+            service.register(
+                request(email, "secret1"),
+                source
             );
         }
 
         AuthApiException blocked = assertThrows(
             AuthApiException.class,
             () -> service.register(
-                request("t@example.com", "secret1", INVITE),
+                request("another@example.com", "secret1"),
                 source
             )
         );
         assertEquals(429, blocked.getStatus().value());
-        verify(users, never()).saveAndFlush(any());
-    }
-
-    @Test
-    void missingServerSecretFailsClosed() {
-        TherapistInviteVerifier verifier = new TherapistInviteVerifier("");
-        AuthApiException error = assertThrows(
-            AuthApiException.class,
-            () -> verifier.matches("anything")
-        );
-        assertEquals("THERAPIST_REGISTRATION_UNAVAILABLE", error.getCode());
+        verify(users, times(5)).saveAndFlush(any(User.class));
     }
 
     private TherapistRegisterRequest request(
         String email,
-        String password,
-        String invite
+        String password
     ) {
-        return new TherapistRegisterRequest("治療師", email, password, invite);
+        return new TherapistRegisterRequest("治療師", email, password);
     }
 }

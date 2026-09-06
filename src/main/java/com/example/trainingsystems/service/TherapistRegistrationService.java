@@ -14,20 +14,17 @@ public class TherapistRegistrationService {
     private final UserRepository userRepository;
     private final PasswordService passwordService;
     private final CustomExerciseIdentityService identityService;
-    private final TherapistInviteVerifier inviteVerifier;
     private final AuthAbuseRateLimiter rateLimiter;
 
     public TherapistRegistrationService(
         UserRepository userRepository,
         PasswordService passwordService,
         CustomExerciseIdentityService identityService,
-        TherapistInviteVerifier inviteVerifier,
         AuthAbuseRateLimiter rateLimiter
     ) {
         this.userRepository = userRepository;
         this.passwordService = passwordService;
         this.identityService = identityService;
-        this.inviteVerifier = inviteVerifier;
         this.rateLimiter = rateLimiter;
     }
 
@@ -37,11 +34,10 @@ public class TherapistRegistrationService {
         String sourceKey
     ) {
         String safeSourceKey = sourceKey == null ? "unknown" : sourceKey;
-        if (rateLimiter.isTherapistRegistrationBlocked(safeSourceKey)) {
+        if (!rateLimiter.allowTherapistRegistrationRequest(safeSourceKey)) {
             throw invalidRegistration(HttpStatus.TOO_MANY_REQUESTS);
         }
-        if (request == null || !inviteVerifier.matches(request.inviteCode())) {
-            rateLimiter.recordTherapistInviteFailure(safeSourceKey);
+        if (request == null) {
             throw invalidRegistration();
         }
 
@@ -63,7 +59,6 @@ public class TherapistRegistrationService {
 
         try {
             User saved = userRepository.saveAndFlush(user);
-            rateLimiter.clearTherapistInviteFailures(safeSourceKey);
             return new AuthLoginResponse(
                 "治療師註冊成功",
                 saved.getId(),

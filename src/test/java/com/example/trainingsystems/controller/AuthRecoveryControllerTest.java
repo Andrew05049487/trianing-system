@@ -84,8 +84,7 @@ class AuthRecoveryControllerTest {
         TherapistRegisterRequest request = new TherapistRegisterRequest(
             "治療師",
             "therapist@example.com",
-            "password",
-            "invite"
+            "password"
         );
         HttpServletRequest httpRequest = mock(HttpServletRequest.class);
         when(httpRequest.getRemoteAddr()).thenReturn("127.0.0.1");
