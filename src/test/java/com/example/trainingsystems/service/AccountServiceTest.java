@@ -11,6 +11,7 @@ import com.example.trainingsystems.repository.ExerciseResultRepository;
 import com.example.trainingsystems.repository.FriendRequestRepository;
 import com.example.trainingsystems.repository.FriendshipRepository;
 import com.example.trainingsystems.repository.UserBindingRepository;
+import com.example.trainingsystems.repository.UserAvatarRepository;
 import com.example.trainingsystems.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,7 @@ class AccountServiceTest {
     private UserBindingRepository bindings;
     private FriendRequestRepository friendRequests;
     private FriendshipRepository friendships;
+    private UserAvatarRepository avatars;
     private AccountService service;
 
     @BeforeEach
@@ -51,6 +53,7 @@ class AccountServiceTest {
         bindings = mock(UserBindingRepository.class);
         friendRequests = mock(FriendRequestRepository.class);
         friendships = mock(FriendshipRepository.class);
+        avatars = mock(UserAvatarRepository.class);
         service = new AccountService(
             users,
             identity,
@@ -62,7 +65,8 @@ class AccountServiceTest {
             results,
             bindings,
             friendRequests,
-            friendships
+            friendships,
+            avatars
         );
         when(users.saveAndFlush(any(User.class))).thenAnswer(call -> call.getArgument(0));
         when(identity.issueToken(any(User.class))).thenReturn("signed-token");
@@ -276,6 +280,8 @@ class AccountServiceTest {
         verify(bindings).findByPatient_IdOrLinkedUser_Id(16L, 16L);
         verify(friendRequests).findBySenderIdOrReceiverId(16L, 16L);
         verify(friendships).findByUserLowIdOrUserHighId(16L, 16L);
+        verify(avatars).deleteById(16L);
+        verify(avatars).flush();
         verify(users).delete(user);
         verify(users).flush();
 

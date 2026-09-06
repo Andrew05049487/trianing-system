@@ -11,6 +11,7 @@ import com.example.trainingsystems.repository.ExerciseResultRepository;
 import com.example.trainingsystems.repository.FriendRequestRepository;
 import com.example.trainingsystems.repository.FriendshipRepository;
 import com.example.trainingsystems.repository.UserBindingRepository;
+import com.example.trainingsystems.repository.UserAvatarRepository;
 import com.example.trainingsystems.repository.UserRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Sort;
@@ -38,6 +39,7 @@ public class AccountService {
     private final UserBindingRepository userBindingRepository;
     private final FriendRequestRepository friendRequestRepository;
     private final FriendshipRepository friendshipRepository;
+    private final UserAvatarRepository avatarRepository;
 
     public AccountService(
         UserRepository userRepository,
@@ -50,7 +52,8 @@ public class AccountService {
         ExerciseResultRepository exerciseResultRepository,
         UserBindingRepository userBindingRepository,
         FriendRequestRepository friendRequestRepository,
-        FriendshipRepository friendshipRepository
+        FriendshipRepository friendshipRepository,
+        UserAvatarRepository avatarRepository
     ) {
         this.userRepository = userRepository;
         this.identityService = identityService;
@@ -63,6 +66,7 @@ public class AccountService {
         this.userBindingRepository = userBindingRepository;
         this.friendRequestRepository = friendRequestRepository;
         this.friendshipRepository = friendshipRepository;
+        this.avatarRepository = avatarRepository;
     }
 
     @Transactional(readOnly = true)
@@ -191,6 +195,8 @@ public class AccountService {
         userBindingRepository.deleteAll(userBindingRepository.findByPatient_IdOrLinkedUser_Id(id, id));
         friendRequestRepository.deleteAll(friendRequestRepository.findBySenderIdOrReceiverId(id, id));
         friendshipRepository.deleteAll(friendshipRepository.findByUserLowIdOrUserHighId(id, id));
+        avatarRepository.deleteById(id);
+        avatarRepository.flush();
         userRepository.delete(user);
         userRepository.flush();
     }
