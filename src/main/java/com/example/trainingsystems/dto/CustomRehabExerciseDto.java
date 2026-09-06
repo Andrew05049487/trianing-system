@@ -18,5 +18,4 @@ public class CustomRehabExerciseDto {
     private Double duration;
     private JsonNode keyframes;
     private JsonNode evaluationRules;
-    private JsonNode poseMeasurementRules;
 }

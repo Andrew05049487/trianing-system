@@ -70,10 +70,4 @@ public class CustomRehabExerciseEntity {
         columnDefinition = "nvarchar(max)"
     )
     private String evaluationRulesJson;
-
-    @Column(
-        name = "pose_measurement_rules_json",
-        columnDefinition = "nvarchar(max)"
-    )
-    private String poseMeasurementRulesJson;
 }

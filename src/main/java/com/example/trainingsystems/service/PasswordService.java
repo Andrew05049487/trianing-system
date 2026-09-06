@@ -9,8 +9,9 @@ import java.util.regex.Pattern;
 
 @Service
 public class PasswordService {
+
     private static final Pattern BCRYPT_PATTERN = Pattern.compile(
-        "^\\$2[ayb]\\$\\d{2}\\$[./A-Za-z0-9]{53}$"
+            "^\\$2[ayb]\\$\\d{2}\\$[./A-Za-z0-9]{53}$"
     );
 
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
@@ -20,10 +21,10 @@ public class PasswordService {
     }
 
     public boolean isAcceptableNewPassword(String password) {
-        return password != null &&
-            !password.isBlank() &&
-            password.length() >= 6 &&
-            password.length() <= 128;
+        return password != null
+                && !password.isBlank()
+                && password.length() >= 6
+                && password.length() <= 128;
     }
 
     public boolean isBcrypt(String storedPassword) {
@@ -31,8 +32,9 @@ public class PasswordService {
     }
 
     /**
-     * Verifies both BCrypt and legacy plaintext values. The caller is responsible
-     * for persisting encode(rawPassword) after a successful legacy match.
+     * Verifies both BCrypt and legacy plaintext values. The caller is
+     * responsible for persisting encode(rawPassword) after a successful legacy
+     * match.
      */
     public PasswordMatch verify(String rawPassword, String storedPassword) {
         if (rawPassword == null || storedPassword == null) {
@@ -40,12 +42,12 @@ public class PasswordService {
         }
         if (isBcrypt(storedPassword)) {
             return encoder.matches(rawPassword, storedPassword)
-                ? PasswordMatch.BCRYPT_MATCH
-                : PasswordMatch.NO_MATCH;
+                    ? PasswordMatch.BCRYPT_MATCH
+                    : PasswordMatch.NO_MATCH;
         }
         boolean matches = MessageDigest.isEqual(
-            rawPassword.getBytes(StandardCharsets.UTF_8),
-            storedPassword.getBytes(StandardCharsets.UTF_8)
+                rawPassword.getBytes(StandardCharsets.UTF_8),
+                storedPassword.getBytes(StandardCharsets.UTF_8)
         );
         return matches ? PasswordMatch.LEGACY_MATCH : PasswordMatch.NO_MATCH;
     }
