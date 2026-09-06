@@ -98,6 +98,20 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    void deliveryFailureDoesNotEscapeForgotPasswordFlow() {
+        User user = user(1L, "person@example.com", "old-password");
+        when(users.findByEmail("person@example.com")).thenReturn(Optional.of(user));
+        allowLock(user);
+        doThrow(new IllegalStateException("provider unavailable"))
+            .when(email)
+            .sendResetCode(any(), any(), any());
+
+        assertDoesNotThrow(() -> service.requestReset("person@example.com"));
+
+        verify(credentials).saveAndFlush(any(PasswordResetCredential.class));
+    }
+
+    @Test
     void resendConsumesPreviousCredentialBeforeCreatingLatest() {
         User user = user(1L, "person@example.com", "old-password");
         PasswordResetCredential previous = credential(user, "111111", NOW.plusSeconds(300));
