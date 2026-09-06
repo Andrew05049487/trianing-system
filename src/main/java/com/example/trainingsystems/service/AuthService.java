@@ -45,11 +45,11 @@ public class AuthService {
             );
         }
 
-        if (password == null || password.isBlank()) {
+        if (!passwordService.isAcceptableNewPassword(password)) {
             throw new AuthApiException(
                 HttpStatus.BAD_REQUEST,
-                "PASSWORD_REQUIRED",
-                "請輸入密碼"
+                "INVALID_PASSWORD",
+                "密碼必須為 6～128 個字元"
             );
         }
 

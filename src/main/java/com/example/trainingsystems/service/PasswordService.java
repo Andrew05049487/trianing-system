@@ -19,6 +19,13 @@ public class PasswordService {
         return encoder.encode(password);
     }
 
+    public boolean isAcceptableNewPassword(String password) {
+        return password != null &&
+            !password.isBlank() &&
+            password.length() >= 6 &&
+            password.length() <= 128;
+    }
+
     public boolean isBcrypt(String storedPassword) {
         return storedPassword != null && BCRYPT_PATTERN.matcher(storedPassword).matches();
     }

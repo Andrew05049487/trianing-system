@@ -1,10 +1,17 @@
 package com.example.trainingsystems.controller;
 
 import com.example.trainingsystems.dto.AuthLoginResponse;
+import com.example.trainingsystems.dto.AuthMessageResponse;
 import com.example.trainingsystems.dto.LoginRequest;
+import com.example.trainingsystems.dto.PasswordForgotRequest;
+import com.example.trainingsystems.dto.PasswordResetRequest;
 import com.example.trainingsystems.dto.RegisterRequest;
+import com.example.trainingsystems.dto.TherapistRegisterRequest;
 import com.example.trainingsystems.service.AuthApiException;
 import com.example.trainingsystems.service.AuthService;
+import com.example.trainingsystems.service.PasswordResetService;
+import com.example.trainingsystems.service.TherapistRegistrationService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,9 +24,17 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
+    private final TherapistRegistrationService therapistRegistrationService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(
+        AuthService authService,
+        PasswordResetService passwordResetService,
+        TherapistRegistrationService therapistRegistrationService
+    ) {
         this.authService = authService;
+        this.passwordResetService = passwordResetService;
+        this.therapistRegistrationService = therapistRegistrationService;
     }
 
     /*
@@ -78,7 +93,7 @@ public class AuthController {
      * JSON:
      * {
      *   "idToken": "Google ID Token",
-     *   "password": "原本帳號密碼"
+     *   "currentPassword": "原本帳號密碼"
      * }
      */
     @PostMapping("/google/link")
@@ -88,7 +103,48 @@ public class AuthController {
         return ResponseEntity.ok(
             authService.linkGoogle(
                 request.get("idToken"),
-                request.get("password")
+                request.get("currentPassword") != null
+                    ? request.get("currentPassword")
+                    : request.get("password")
+            )
+        );
+    }
+
+    @PostMapping("/password/forgot")
+    public ResponseEntity<AuthMessageResponse> forgotPassword(
+        @RequestBody PasswordForgotRequest request
+    ) {
+        passwordResetService.requestReset(
+            request == null ? null : request.identifier()
+        );
+        return ResponseEntity.ok(
+            new AuthMessageResponse(PasswordResetService.GENERIC_FORGOT_MESSAGE)
+        );
+    }
+
+    @PostMapping("/password/reset")
+    public ResponseEntity<AuthMessageResponse> resetPassword(
+        @RequestBody PasswordResetRequest request
+    ) {
+        passwordResetService.resetPassword(
+            request == null ? null : request.identifier(),
+            request == null ? null : request.code(),
+            request == null ? null : request.newPassword()
+        );
+        return ResponseEntity.ok(
+            new AuthMessageResponse("密碼已更新，請使用新密碼登入")
+        );
+    }
+
+    @PostMapping("/therapist/register")
+    public ResponseEntity<AuthLoginResponse> registerTherapist(
+        @RequestBody TherapistRegisterRequest request,
+        HttpServletRequest httpRequest
+    ) {
+        return ResponseEntity.ok(
+            therapistRegistrationService.register(
+                request,
+                httpRequest.getRemoteAddr()
             )
         );
     }
