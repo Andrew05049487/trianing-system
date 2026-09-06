@@ -13,17 +13,18 @@ import java.time.Duration;
 
 @Service
 public class SmtpPasswordResetEmailService implements PasswordResetEmailService {
-    private static final Logger logger =
-        LoggerFactory.getLogger(SmtpPasswordResetEmailService.class);
+
+    private static final Logger logger
+            = LoggerFactory.getLogger(SmtpPasswordResetEmailService.class);
 
     private final JavaMailSender mailSender;
     private final TaskExecutor mailExecutor;
     private final String from;
 
     public SmtpPasswordResetEmailService(
-        JavaMailSender mailSender,
-        @Qualifier("passwordResetMailExecutor") TaskExecutor mailExecutor,
-        @Value("${MAIL_FROM:}") String from
+            JavaMailSender mailSender,
+            @Qualifier("passwordResetMailExecutor") TaskExecutor mailExecutor,
+            @Value("${MAIL_FROM:}") String from
     ) {
         this.mailSender = mailSender;
         this.mailExecutor = mailExecutor;
@@ -44,16 +45,16 @@ public class SmtpPasswordResetEmailService implements PasswordResetEmailService 
         message.setTo(email);
         message.setSubject("RehabAssist 密碼重設驗證碼");
         message.setText(
-            "您的密碼重設驗證碼為：" + code + "\n\n" +
-            "驗證碼將於 " + validFor.toMinutes() + " 分鐘後失效。" +
-            "請勿將驗證碼提供給任何人。\n\n" +
-            "若您未提出密碼重設要求，請忽略此信。"
+                "您的密碼重設驗證碼為：" + code + "\n\n"
+                + "驗證碼將於 " + validFor.toMinutes() + " 分鐘後失效。"
+                + "請勿將驗證碼提供給任何人。\n\n"
+                + "若您未提出密碼重設要求，請忽略此信。"
         );
         try {
             mailSender.send(message);
         } catch (RuntimeException error) {
             // Never include the destination or verification code in logs.
-            logger.warn("Password reset email delivery failed");
+            logger.warn("Password reset email delivery failed", error);
         }
     }
 }
