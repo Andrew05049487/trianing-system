@@ -16,8 +16,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
     PatientCustomExerciseController.class,
     UnifiedExerciseAssignmentController.class,
     PatientAssignedExerciseController.class,
-    TherapistPatientController.class,
-    TrainingSessionResultController.class
+    TherapistPatientController.class
 })
 public class CustomExerciseExceptionHandler {
 
