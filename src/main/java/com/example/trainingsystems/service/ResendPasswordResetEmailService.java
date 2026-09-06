@@ -2,6 +2,7 @@ package com.example.trainingsystems.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
@@ -31,6 +32,7 @@ public class ResendPasswordResetEmailService
     private final String apiKey;
     private final String from;
 
+    @Autowired
     public ResendPasswordResetEmailService(
         RestClient.Builder restClientBuilder,
         @Qualifier("passwordResetMailExecutor") TaskExecutor mailExecutor,
