@@ -1,165 +1,454 @@
 package com.example.trainingsystems.service;
 
-import com.example.trainingsystems.entity.TrainingHistoryEntity;
-import com.example.trainingsystems.entity.TrainingHistoryVideoEntity;
-import com.example.trainingsystems.entity.User;
-import com.example.trainingsystems.repository.TrainingHistoryRepository;
-import com.example.trainingsystems.repository.TrainingHistoryVideoRepository;
-import com.example.trainingsystems.repository.UserBindingRepository;
-import com.example.trainingsystems.repository.UserRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockMultipartFile;
-
-import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.mock.web.MockMultipartFile;
+
+import com.example.trainingsystems.entity.TrainingHistoryEntity;
+import com.example.trainingsystems.entity.User;
+import com.example.trainingsystems.repository.TrainingHistoryRepository;
+import com.example.trainingsystems.repository.UserBindingRepository;
+import com.example.trainingsystems.repository.UserRepository;
 
 class TrainingHistoryVideoServiceTest {
+
     private TrainingHistoryRepository historyRepository;
-    private TrainingHistoryVideoRepository videoRepository;
     private UserRepository userRepository;
     private UserBindingRepository bindingRepository;
     private CustomExerciseIdentityService identityService;
+    private JdbcTemplate jdbcTemplate;
+
     private TrainingHistoryVideoService service;
+
     private User patient;
+
 
     @BeforeEach
     void setUp() {
-        historyRepository = mock(TrainingHistoryRepository.class);
-        videoRepository = mock(TrainingHistoryVideoRepository.class);
-        userRepository = mock(UserRepository.class);
-        bindingRepository = mock(UserBindingRepository.class);
-        identityService = mock(CustomExerciseIdentityService.class);
-        service = new TrainingHistoryVideoService(
-            historyRepository,
-            videoRepository,
-            userRepository,
-            bindingRepository,
-            identityService,
-            4L
-        );
-        patient = user(7L, "PATIENT");
-        TrainingHistoryEntity history = new TrainingHistoryEntity();
+
+        historyRepository =
+            mock(TrainingHistoryRepository.class);
+
+        userRepository =
+            mock(UserRepository.class);
+
+        bindingRepository =
+            mock(UserBindingRepository.class);
+
+        identityService =
+            mock(CustomExerciseIdentityService.class);
+
+        jdbcTemplate =
+            mock(JdbcTemplate.class);
+
+
+        service =
+            new TrainingHistoryVideoService(
+                historyRepository,
+                userRepository,
+                bindingRepository,
+                identityService,
+                jdbcTemplate,
+                4L
+            );
+
+
+        patient =
+            user(
+                7L,
+                "PATIENT"
+            );
+
+
+        TrainingHistoryEntity history =
+            new TrainingHistoryEntity();
+
         history.setId(55L);
         history.setUser(patient);
-        when(historyRepository.findById(55L)).thenReturn(Optional.of(history));
+
+
+        when(
+            historyRepository.findById(55L)
+        ).thenReturn(
+            Optional.of(history)
+        );
     }
+
 
     @Test
-    void uploadCreatesOneRowAndPreservesUnicodeFileName() {
-        MockMultipartFile file = video("病患伸手.mp4", new byte[] {1, 2, 3});
-        when(videoRepository.findById(55L)).thenReturn(Optional.empty());
-        when(videoRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+    void uploadCreatesVideoThroughJdbcStreaming() {
 
-        service.upload(55L, 7L, file);
+        MockMultipartFile file =
+            video(
+                "病患伸手.mp4",
+                new byte[] {1, 2, 3}
+            );
 
-        verify(videoRepository).save(any(TrainingHistoryVideoEntity.class));
+
+        // 0 = DB 還沒有這筆影片
+        when(
+            jdbcTemplate.queryForObject(
+                anyString(),
+                eq(Integer.class),
+                eq(55L)
+            )
+        ).thenReturn(0);
+
+
+        when(
+            jdbcTemplate.update(
+                any(PreparedStatementCreator.class)
+            )
+        ).thenReturn(1);
+
+
+        service.upload(
+            55L,
+            7L,
+            file
+        );
+
+
+        verify(
+            jdbcTemplate
+        ).update(
+            any(PreparedStatementCreator.class)
+        );
     }
+
 
     @Test
     void duplicateUploadReplacesExistingRowInsteadOfAddingAnother() {
-        TrainingHistoryVideoEntity existing = new TrainingHistoryVideoEntity();
-        existing.setHistoryId(55L);
-        existing.setCreatedAt(LocalDateTime.of(2026, 9, 1, 10, 0));
-        existing.setVideoData(new byte[] {9});
-        when(videoRepository.findById(55L)).thenReturn(Optional.of(existing));
 
-        service.upload(55L, 7L, video("new.mp4", new byte[] {1, 2}));
+        // 1 = DB 已經有同 historyId 的影片
+        when(
+            jdbcTemplate.queryForObject(
+                anyString(),
+                eq(Integer.class),
+                eq(55L)
+            )
+        ).thenReturn(1);
 
-        assertArrayEquals(new byte[] {1, 2}, existing.getVideoData());
-        assertThat(existing.getCreatedAt())
-            .isEqualTo(LocalDateTime.of(2026, 9, 1, 10, 0));
-        assertThat(existing.getUpdatedAt()).isNotNull();
-        verify(videoRepository).save(existing);
+
+        when(
+            jdbcTemplate.update(
+                any(PreparedStatementCreator.class)
+            )
+        ).thenReturn(1);
+
+
+        service.upload(
+            55L,
+            7L,
+            video(
+                "new.mp4",
+                new byte[] {1, 2}
+            )
+        );
+
+
+        verify(
+            jdbcTemplate
+        ).update(
+            any(PreparedStatementCreator.class)
+        );
     }
+
 
     @Test
     void uploadRejectsMissingHistoryNonVideoAndOversizedFile() {
-        when(historyRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.upload(
-            99L,
-            7L,
-            video("a.mp4", new byte[] {1})
-        )).isInstanceOfSatisfying(TrainingHistoryApiException.class,
-            error -> assertThat(error.getStatus().value()).isEqualTo(404));
-
-        MockMultipartFile text = new MockMultipartFile(
-            "file", "bad.txt", "text/plain", new byte[] {1}
+        when(
+            historyRepository.findById(99L)
+        ).thenReturn(
+            Optional.empty()
         );
-        assertThatThrownBy(() -> service.upload(55L, 7L, text))
-            .isInstanceOfSatisfying(TrainingHistoryApiException.class,
-                error -> assertThat(error.getStatus().value()).isEqualTo(415));
 
-        assertThatThrownBy(() -> service.upload(
-            55L,
-            7L,
-            video("large.mp4", new byte[] {1, 2, 3, 4, 5})
-        )).isInstanceOfSatisfying(TrainingHistoryApiException.class,
-            error -> assertThat(error.getStatus().value()).isEqualTo(413));
+
+        assertThatThrownBy(
+            () ->
+                service.upload(
+                    99L,
+                    7L,
+                    video(
+                        "a.mp4",
+                        new byte[] {1}
+                    )
+                )
+        ).isInstanceOfSatisfying(
+            TrainingHistoryApiException.class,
+            error ->
+                assertThat(
+                    error.getStatus().value()
+                ).isEqualTo(404)
+        );
+
+
+        MockMultipartFile text =
+            new MockMultipartFile(
+                "file",
+                "bad.txt",
+                "text/plain",
+                new byte[] {1}
+            );
+
+
+        assertThatThrownBy(
+            () ->
+                service.upload(
+                    55L,
+                    7L,
+                    text
+                )
+        ).isInstanceOfSatisfying(
+            TrainingHistoryApiException.class,
+            error ->
+                assertThat(
+                    error.getStatus().value()
+                ).isEqualTo(415)
+        );
+
+
+        assertThatThrownBy(
+            () ->
+                service.upload(
+                    55L,
+                    7L,
+                    video(
+                        "large.mp4",
+                        new byte[] {
+                            1, 2, 3, 4, 5
+                        }
+                    )
+                )
+        ).isInstanceOfSatisfying(
+            TrainingHistoryApiException.class,
+            error ->
+                assertThat(
+                    error.getStatus().value()
+                ).isEqualTo(413)
+        );
     }
+
 
     @Test
     void uploadRejectsWrongHistoryOwner() {
-        assertThatThrownBy(() -> service.upload(
-            55L,
-            8L,
-            video("a.mp4", new byte[] {1})
-        )).isInstanceOfSatisfying(TrainingHistoryApiException.class,
-            error -> assertThat(error.getStatus().value()).isEqualTo(403));
+
+        assertThatThrownBy(
+            () ->
+                service.upload(
+                    55L,
+                    8L,
+                    video(
+                        "a.mp4",
+                        new byte[] {1}
+                    )
+                )
+        ).isInstanceOfSatisfying(
+            TrainingHistoryApiException.class,
+            error ->
+                assertThat(
+                    error.getStatus().value()
+                ).isEqualTo(403)
+        );
     }
+
 
     @Test
-    void boundTherapistCanReadButUnboundTherapistCannot() {
-        User therapist = user(9L, "THERAPIST");
-        TrainingHistoryVideoEntity video = new TrainingHistoryVideoEntity();
-        video.setHistoryId(55L);
-        video.setContentType("video/mp4");
-        video.setFileName("訓練.mp4");
-        video.setVideoData(new byte[] {1, 2, 3});
-        when(userRepository.findById(9L)).thenReturn(Optional.of(therapist));
-        when(identityService.isConfigured()).thenReturn(true);
-        when(identityService.isValid(therapist, "token")).thenReturn(true);
-        when(videoRepository.findById(55L)).thenReturn(Optional.of(video));
-        when(bindingRepository
-            .existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(
-                7L,
+    @SuppressWarnings({
+        "rawtypes",
+        "unchecked"
+    })
+    void boundTherapistCanReadMetadataButUnboundTherapistCannot() {
+
+        User therapist =
+            user(
                 9L,
                 "THERAPIST"
-            )).thenReturn(true);
+            );
 
-        assertArrayEquals(
-            new byte[] {1, 2, 3},
-            service.read(55L, 9L, "token").bytes()
+
+        when(
+            userRepository.findById(9L)
+        ).thenReturn(
+            Optional.of(therapist)
         );
 
-        when(bindingRepository
-            .existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(
-                7L,
+
+        when(
+            identityService.isConfigured()
+        ).thenReturn(true);
+
+
+        when(
+            identityService.isValid(
+                therapist,
+                "token"
+            )
+        ).thenReturn(true);
+
+
+        when(
+            bindingRepository
+                .existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(
+                    7L,
+                    9L,
+                    "THERAPIST"
+                )
+        ).thenReturn(true);
+
+
+        TrainingHistoryVideoService.VideoMetadata metadata =
+            new TrainingHistoryVideoService.VideoMetadata(
+                "訓練.mp4",
+                "video/mp4",
+                3L
+            );
+
+
+        doReturn(
+            List.of(metadata)
+        ).when(
+            jdbcTemplate
+        ).query(
+            anyString(),
+            any(RowMapper.class),
+            any(Object[].class)
+        );
+
+
+        TrainingHistoryVideoService.VideoMetadata result =
+            service.requireReadableVideo(
+                55L,
                 9L,
-                "THERAPIST"
-            )).thenReturn(false);
-        assertThatThrownBy(() -> service.read(55L, 9L, "token"))
-            .isInstanceOfSatisfying(TrainingHistoryApiException.class,
-                error -> assertThat(error.getStatus().value()).isEqualTo(403));
+                "token"
+            );
+
+
+        assertThat(
+            result.fileName()
+        ).isEqualTo(
+            "訓練.mp4"
+        );
+
+
+        assertThat(
+            result.contentType()
+        ).isEqualTo(
+            "video/mp4"
+        );
+
+
+        assertThat(
+            result.fileSize()
+        ).isEqualTo(
+            3L
+        );
+
+
+        when(
+            bindingRepository
+                .existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(
+                    7L,
+                    9L,
+                    "THERAPIST"
+                )
+        ).thenReturn(false);
+
+
+        assertThatThrownBy(
+            () ->
+                service.requireReadableVideo(
+                    55L,
+                    9L,
+                    "token"
+                )
+        ).isInstanceOfSatisfying(
+            TrainingHistoryApiException.class,
+            error ->
+                assertThat(
+                    error.getStatus().value()
+                ).isEqualTo(403)
+        );
     }
 
-    private MockMultipartFile video(String name, byte[] bytes) {
-        return new MockMultipartFile("file", name, "video/mp4", bytes);
+
+    @Test
+    void readRangeReturnsOnlyRequestedChunk() {
+
+        byte[] expected =
+            new byte[] {
+                2, 3, 4
+            };
+
+
+        doReturn(
+            expected
+        ).when(
+            jdbcTemplate
+        ).queryForObject(
+            anyString(),
+            eq(byte[].class),
+            any(Object[].class)
+        );
+
+
+        byte[] actual =
+            service.readRange(
+                55L,
+                2L,
+                3
+            );
+
+
+        assertArrayEquals(
+            expected,
+            actual
+        );
     }
 
-    private User user(Long id, String role) {
-        User user = new User();
+
+    private MockMultipartFile video(
+        String name,
+        byte[] bytes
+    ) {
+
+        return new MockMultipartFile(
+            "file",
+            name,
+            "video/mp4",
+            bytes
+        );
+    }
+
+
+    private User user(
+        Long id,
+        String role
+    ) {
+
+        User user =
+            new User();
+
         user.setId(id);
         user.setRole(role);
+
         return user;
     }
 }
