@@ -36,7 +36,11 @@ public class TrainingHistoryEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "action_name", nullable = false, length = 100)
+    @Column(
+        name = "action_name",
+        nullable = false,
+        columnDefinition = "NVARCHAR(100)"
+    )
     private String actionName;
 
     @Column(name = "difficulty", nullable = false)
@@ -44,6 +48,9 @@ public class TrainingHistoryEntity {
 
     @Column(name = "duration_seconds", nullable = false)
     private Integer durationSeconds;
+
+    @Column(name = "completed_reps", nullable = false)
+    private Integer completedReps;
 
     @Column(name = "target_reps", nullable = false)
     private Integer targetReps;

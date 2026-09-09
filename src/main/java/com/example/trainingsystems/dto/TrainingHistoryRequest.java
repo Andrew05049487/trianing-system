@@ -19,6 +19,8 @@ public class TrainingHistoryRequest {
 
     private Integer durationSeconds;
 
+    private Integer completedReps;
+
     private Integer targetReps;
 
     private List<String> mistakeLogs;
