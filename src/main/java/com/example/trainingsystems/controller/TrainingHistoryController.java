@@ -173,9 +173,8 @@ public class TrainingHistoryController {
 
         entity.setUser(user);
 
-        entity.setSessionId(
-            request.getSessionId()
-        );
+        // 同一次自動升級的 Lv.1 / Lv.2 / Lv.3 共用同一個 sessionId。
+        entity.setSessionId(request.getSessionId());
 
         entity.setActionName(
             request.getActionName()
@@ -699,10 +698,13 @@ public class TrainingHistoryController {
             "id",
             e.getId()
         );
+
         m.put(
             "sessionId",
             e.getSessionId()
         );
+
+
 
         m.put(
             "timestamp",
