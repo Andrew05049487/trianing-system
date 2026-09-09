@@ -173,6 +173,10 @@ public class TrainingHistoryController {
 
         entity.setUser(user);
 
+        entity.setSessionId(
+            request.getSessionId()
+        );
+
         entity.setActionName(
             request.getActionName()
         );
@@ -695,7 +699,10 @@ public class TrainingHistoryController {
             "id",
             e.getId()
         );
-
+        m.put(
+            "sessionId",
+            e.getSessionId()
+        );
 
         m.put(
             "timestamp",
