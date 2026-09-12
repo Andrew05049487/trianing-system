@@ -6,6 +6,7 @@ import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.repository.TrainingHistoryRepository;
 import com.example.trainingsystems.repository.TrainingHistoryVideoRepository;
 import com.example.trainingsystems.repository.UserRepository;
+import com.example.trainingsystems.service.TrainingHistoryEvaluationService;
 import com.example.trainingsystems.service.TrainingHistoryVideoService;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -74,19 +75,23 @@ public class TrainingHistoryController {
 
     private final TrainingHistoryVideoService videoService;
 
+    private final TrainingHistoryEvaluationService evaluationService;
+
 
     public TrainingHistoryController(
         TrainingHistoryRepository repository,
         TrainingHistoryVideoRepository videoRepository,
         UserRepository userRepository,
         ObjectMapper objectMapper,
-        TrainingHistoryVideoService videoService
+        TrainingHistoryVideoService videoService,
+        TrainingHistoryEvaluationService evaluationService
     ) {
         this.repository = repository;
         this.videoRepository = videoRepository;
         this.userRepository = userRepository;
         this.objectMapper = objectMapper;
         this.videoService = videoService;
+        this.evaluationService = evaluationService;
     }
 
 
@@ -220,6 +225,8 @@ public class TrainingHistoryController {
         entity.setMistakeLogs(
             writeLogs(logs)
         );
+
+        evaluationService.apply(request, entity);
 
 
         entity.setClientTimestamp(
@@ -748,6 +755,8 @@ public class TrainingHistoryController {
                 e.getMistakeLogs()
             )
         );
+
+        evaluationService.addToResponse(e, m);
 
 
         /*

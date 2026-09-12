@@ -1,6 +1,7 @@
 package com.example.trainingsystems.entity;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -77,6 +78,33 @@ public class TrainingHistoryEntity {
         columnDefinition = "NVARCHAR(MAX)"
     )
     private String mistakeLogs;
+
+    @Column(name = "body_score", precision = 5, scale = 2)
+    private BigDecimal averageBodyScore;
+
+    @Column(name = "body_rep_scores", columnDefinition = "NVARCHAR(MAX)")
+    private String bodyRepScores;
+
+    @Column(name = "template_score", precision = 5, scale = 2)
+    private BigDecimal templateScore;
+
+    @Column(name = "template_id", length = 160)
+    private String templateId;
+
+    @Column(name = "template_name", columnDefinition = "NVARCHAR(200)")
+    private String templateName;
+
+    @Column(name = "template_valid_rep_count", nullable = false)
+    private Integer templateValidRepCount = 0;
+
+    @Column(name = "template_rep_scores", columnDefinition = "NVARCHAR(MAX)")
+    private String templateRepScores;
+
+    @Column(
+        name = "template_difference_summary",
+        columnDefinition = "NVARCHAR(MAX)"
+    )
+    private String templateDifferenceSummary;
 
     /**
      * app 端 TrainingRecord.timestamp（yyyy-MM-dd HH:mm:ss），

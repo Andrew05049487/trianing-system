@@ -1,6 +1,7 @@
 package com.example.trainingsystems.dto;
 
 import java.util.List;
+import java.math.BigDecimal;
 
 import lombok.Data;
 
@@ -31,6 +32,22 @@ public class TrainingHistoryRequest {
     private Integer targetReps;
 
     private List<String> mistakeLogs;
+
+    private BigDecimal averageBodyScore;
+
+    private List<Integer> bodyRepScores;
+
+    private BigDecimal templateScore;
+
+    private String templateId;
+
+    private String templateName;
+
+    private Integer templateValidRepCount;
+
+    private List<BigDecimal> templateRepScores;
+
+    private List<String> templateDifferenceSummary;
 
     /** 對應 TrainingRecord.timestamp，做為冪等上傳的鍵。 */
     private String clientTimestamp;

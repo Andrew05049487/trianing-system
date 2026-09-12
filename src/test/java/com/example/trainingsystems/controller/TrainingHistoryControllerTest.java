@@ -1,5 +1,6 @@
 package com.example.trainingsystems.controller;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,7 @@ import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.repository.TrainingHistoryRepository;
 import com.example.trainingsystems.repository.TrainingHistoryVideoRepository;
 import com.example.trainingsystems.repository.UserRepository;
+import com.example.trainingsystems.service.TrainingHistoryEvaluationService;
 import com.example.trainingsystems.service.TrainingHistoryVideoService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -73,7 +75,8 @@ class TrainingHistoryControllerTest {
                 videoRepository,
                 userRepository,
                 new ObjectMapper(),
-                videoService
+                videoService,
+                new TrainingHistoryEvaluationService(new ObjectMapper())
             );
     }
 
@@ -151,6 +154,15 @@ class TrainingHistoryControllerTest {
             )
         );
 
+        request.setAverageBodyScore(new BigDecimal("92.5"));
+        request.setBodyRepScores(List.of(92));
+        request.setTemplateScore(new BigDecimal("88.25"));
+        request.setTemplateId("template-1");
+        request.setTemplateName("標準抬腳");
+        request.setTemplateValidRepCount(1);
+        request.setTemplateRepScores(List.of(new BigDecimal("88.25")));
+        request.setTemplateDifferenceSummary(List.of("右膝軌跡差異較大"));
+
 
         ResponseEntity<Map<String, Object>> response =
             controller.save(request);
@@ -179,6 +191,18 @@ class TrainingHistoryControllerTest {
             )
             .containsEntry(
                 "targetReps",
+                1
+            )
+            .containsEntry(
+                "averageBodyScore",
+                new BigDecimal("92.50")
+            )
+            .containsEntry(
+                "templateScore",
+                new BigDecimal("88.25")
+            )
+            .containsEntry(
+                "templateValidRepCount",
                 1
             )
             .containsEntry(
