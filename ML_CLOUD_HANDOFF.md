@@ -21,6 +21,12 @@
 - Required additive SQL script: `sqlserver_migration_ml_research_review.sql`, AFTER the second-round base research migration. No migration has been run. Backend and Flutter must be deployed compatibly; old Flutter can still save a draft but cannot submit it.
 - Focused backend tests: `mvn -q '-Dtest=ResearchDataServiceTest,ResearchAuthorityServiceTest' test` PASS. Full suite, SQL Server, Render and Android E2E NOT RUN. Next: Flutter submit/review UI; then export/retention, unified login.
 
+## Third-round Stage D backend checkpoint (2026-09-23)
+
+- `GET /api/ml-research/management/stats` and `/export` require an authenticated per-study manager grant. Export returns a bounded no-store ZIP in memory (`samples/*.json`, `labels.csv`, `manifest.json`) matching `ml/train.py` and never writes a server file. It includes only current-consent, still-present, independently APPROVED, trainable-label samples; `unassessable` is excluded. The stored sample is re-sanitized and five features are checked against `ml/feature_schema.py` math before export. Annotator IDs are export-local aliases, not account IDs. A scoped export audit stores actor/time/study/schema/count, not payload.
+- New additive `sqlserver_migration_ml_research_export.sql` creates export audit table; not executed. Export is capped at 500 approved rows / 20 MB uncompressed to avoid unbounded Render memory. Larger datasets need a reviewed batch mechanism, not silent truncation.
+- Focused `mvn -q '-Dtest=ResearchManagementServiceTest' test` PASS. No real labeled dataset, model training, SQL Server, Render or Android E2E. Next: Flutter minimal manager UI, retention and unified login.
+
 ## Git and companion
 
 - Backend branch/base: `feat/rehab-ml-cloud-label` / `94132993d7d32ffc4b090ec429975fa3543275f5`; stage commit `f6caf96781884f5809222396cdc834128da63bc2`.

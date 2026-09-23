@@ -24,4 +24,6 @@ public interface ResearchAnnotationRepository extends JpaRepository<ResearchAnno
         "where a.sampleId = s.id and a.status = 'SUBMITTED' and s.participantUserId in :patientIds")
     Page<ResearchAnnotationEntity> findSubmittedForPatients(
         @Param("patientIds") Collection<Long> patientIds, Pageable pageable);
+
+    Page<ResearchAnnotationEntity> findByStatus(String status, Pageable pageable);
 }
