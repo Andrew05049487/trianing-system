@@ -2,8 +2,8 @@
 
 ## Git and companion
 
-- Backend branch/base: `feat/rehab-ml-cloud-label` / `94132993d7d32ffc4b090ec429975fa3543275f5`; stage commit pending.
-- Flutter companion branch/base: `feat/rehab-ml-poc` / `ad1f0bf13b3ebb6828aa69cb9f62b8bd7cfee546`.
+- Backend branch/base: `feat/rehab-ml-cloud-label` / `94132993d7d32ffc4b090ec429975fa3543275f5`; stage commit `f6caf96781884f5809222396cdc834128da63bc2`.
+- Flutter companion branch/base: `feat/rehab-ml-poc` / `ad1f0bf13b3ebb6828aa69cb9f62b8bd7cfee546`; compatible functionality at `d7b8015127e78ecf5b9b16e87ccd199b72a3b912`.
 - Check both working trees and latest commits before continuing. Do not push, merge or open PR automatically.
 
 ## Architecture and API
@@ -21,7 +21,7 @@
 ## Completed / remaining
 
 - Completed: secure minimal API, four research entities/repositories, validation, consent, sample upload/list/detail/delete, bound-therapist label, audit, account cleanup, SQL migration.
-- Next: commit backend stage, then Flutter consent/sync/therapist UI using exact API version; record paired commit SHAs.
+- Backend stage commit `f6caf96781884f5809222396cdc834128da63bc2`; Flutter patient consent/sync and therapist list/detail/label UI committed through `d7b8015`. Both repositories remain undeployed for this feature.
 - Later: research-manager authority, approval/review, approved export, management stats and retention automation. No manager authority exists today, so do not expose broad endpoints.
 - Withdrawal stops uploads and therapist access. `DELETE /my-data` deletes live rows; backup retention/deletion is not proven and requires policy.
 
@@ -29,3 +29,9 @@
 
 - Focused tests: ResearchDataServiceTest 12/12 and AccountServiceTest 14/14 passed. `mvn -q -DskipTests package` passed. Full backend suite, SQL Server/Render and Android E2E not run at this stage.
 - No genuine labeled data/trained classifier or ethics approval. Do not collect real subjects until governance review.
+
+## Next continuation steps
+
+1. Read Flutter handoff at `d7b8015`; do not recreate completed consent/sync/player/label UI.
+2. After research governance approval, review/run migration manually, deploy compatible backend/Flutter, then Android E2E. Feature flag remains OFF by default.
+3. Design explicit researcher authorization for review/export; add approval, training export, stats and retention with separate tests/commits.
