@@ -72,6 +72,29 @@ public class ResearchDataController {
             request.labelVersion(), request.actionDefinitionVersion());
     }
 
+    @PostMapping("/samples/{sampleId}/label/submit")
+    public AnnotationView submitLabel(
+        @RequestHeader(value = "X-User-Id", required = false) Long userId,
+        @RequestHeader(value = "X-Custom-Exercise-Token", required = false) String token,
+        @PathVariable String sampleId
+    ) { return service.submitLabel(userId, token, sampleId); }
+
+    @GetMapping("/review-queue")
+    public Page<SampleView> reviewQueue(
+        @RequestHeader(value = "X-User-Id", required = false) Long userId,
+        @RequestHeader(value = "X-Custom-Exercise-Token", required = false) String token,
+        @RequestParam(defaultValue = "0") int page,
+        @RequestParam(defaultValue = "20") int size
+    ) { return service.reviewQueue(userId, token, page, size); }
+
+    @PostMapping("/samples/{sampleId}/label/review")
+    public AnnotationView reviewLabel(
+        @RequestHeader(value = "X-User-Id", required = false) Long userId,
+        @RequestHeader(value = "X-Custom-Exercise-Token", required = false) String token,
+        @PathVariable String sampleId,
+        @RequestBody ReviewRequest request
+    ) { return service.reviewLabel(userId, token, sampleId, request.approve(), request.note()); }
+
     @DeleteMapping("/samples/{sampleId}")
     public ResponseEntity<Void> deleteOwnSample(
         @RequestHeader(value = "X-User-Id", required = false) Long userId,
@@ -94,4 +117,5 @@ public class ResearchDataController {
     public record ConsentRequest(boolean agree, String version) {}
     public record LabelRequest(String label, String note, String labelVersion,
                                String actionDefinitionVersion) {}
+    public record ReviewRequest(boolean approve, String note) {}
 }

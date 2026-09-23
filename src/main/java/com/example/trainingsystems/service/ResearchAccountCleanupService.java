@@ -2,6 +2,7 @@ package com.example.trainingsystems.service;
 
 import com.example.trainingsystems.entity.ResearchSampleEntity;
 import com.example.trainingsystems.repository.ResearchAnnotationRepository;
+import com.example.trainingsystems.repository.ResearchAnnotationRevisionRepository;
 import com.example.trainingsystems.repository.ResearchConsentRepository;
 import com.example.trainingsystems.repository.ResearchGrantRepository;
 import com.example.trainingsystems.repository.ResearchReviewRequestRepository;
@@ -17,15 +18,18 @@ import java.util.List;
 public class ResearchAccountCleanupService {
     private final ResearchSampleRepository samples;
     private final ResearchAnnotationRepository annotations;
+    private final ResearchAnnotationRevisionRepository revisions;
     private final ResearchConsentRepository consents;
     private final ResearchGrantRepository grants;
     private final ResearchReviewRequestRepository reviewRequests;
 
     public ResearchAccountCleanupService(ResearchSampleRepository samples,
-        ResearchAnnotationRepository annotations, ResearchConsentRepository consents,
+        ResearchAnnotationRepository annotations, ResearchAnnotationRevisionRepository revisions,
+        ResearchConsentRepository consents,
         ResearchGrantRepository grants, ResearchReviewRequestRepository reviewRequests) {
         this.samples = samples;
         this.annotations = annotations;
+        this.revisions = revisions;
         this.consents = consents;
         this.grants = grants;
         this.reviewRequests = reviewRequests;
@@ -41,9 +45,13 @@ public class ResearchAccountCleanupService {
         List<ResearchSampleEntity> owned = samples.findByParticipantUserId(userId);
         for (ResearchSampleEntity sample : owned) {
             annotations.findById(sample.getId()).ifPresent(annotations::delete);
+            revisions.deleteAll(revisions.findBySampleId(sample.getId()));
         }
         samples.deleteAll(owned);
-        annotations.deleteAll(annotations.findByTherapistUserId(userId));
+        for (var annotation : annotations.findByTherapistUserId(userId)) {
+            revisions.deleteAll(revisions.findBySampleId(annotation.getSampleId()));
+            annotations.delete(annotation);
+        }
         consents.findById(userId).ifPresent(consents::delete);
         reviewRequests.deleteAll(reviewRequests.findByUserId(userId));
         grants.deleteAll(grants.findByUserId(userId));

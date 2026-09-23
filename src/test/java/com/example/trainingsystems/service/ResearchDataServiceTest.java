@@ -6,6 +6,7 @@ import com.example.trainingsystems.entity.ResearchSampleEntity;
 import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.entity.UserBinding;
 import com.example.trainingsystems.repository.ResearchAnnotationRepository;
+import com.example.trainingsystems.repository.ResearchAnnotationRevisionRepository;
 import com.example.trainingsystems.repository.ResearchAuditRepository;
 import com.example.trainingsystems.repository.ResearchConsentRepository;
 import com.example.trainingsystems.repository.ResearchSampleRepository;
@@ -45,6 +46,7 @@ class ResearchDataServiceTest {
     @Mock ResearchConsentRepository consents;
     @Mock ResearchSampleRepository samples;
     @Mock ResearchAnnotationRepository annotations;
+    @Mock ResearchAnnotationRevisionRepository revisions;
     @Mock ResearchAuditRepository audits;
     @Mock ResearchAuthorityService authority;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -55,7 +57,7 @@ class ResearchDataServiceTest {
     void setUp() {
         validator = new ResearchSampleValidator(mapper);
         service = new ResearchDataService(users, bindings, identity, consents,
-            samples, annotations, audits, validator, authority, mapper, true, "study-v1");
+            samples, annotations, revisions, audits, validator, authority, mapper, true, "study-v1");
     }
 
     private void authenticate(long id, String role) {
@@ -244,14 +246,14 @@ class ResearchDataServiceTest {
         when(consents.findById(1L)).thenReturn(Optional.of(activeConsent()));
         when(bindings.existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(1L, 7L, "THERAPIST"))
             .thenReturn(true);
-        when(annotations.findById("sample-1")).thenReturn(Optional.empty());
+        when(annotations.findForUpdate("sample-1")).thenReturn(Optional.empty());
         var result = service.label(7L, "token", "sample-1",
             "unassessable", "2D skeleton insufficient", "v1", "v1");
         assertThat(result.label()).isEqualTo("unassessable");
         verify(annotations).save(any());
         ResearchAnnotationEntity other = new ResearchAnnotationEntity();
         other.setTherapistUserId(8L);
-        when(annotations.findById("sample-1")).thenReturn(Optional.of(other));
+        when(annotations.findForUpdate("sample-1")).thenReturn(Optional.of(other));
         assertThatThrownBy(() -> service.label(7L, "token", "sample-1",
             "meets_requirement", "", "v1", "v1"))
             .isInstanceOf(ResponseStatusException.class);
@@ -266,6 +268,74 @@ class ResearchDataServiceTest {
         service.deleteOwnSample(1L, "token", "sample-1");
         verify(annotations).deleteById("sample-1");
         verify(samples).delete(sample);
+    }
+
+    @Test void draftMustBeSubmittedBeforeReviewAndSnapshotsAreWritten() {
+        authenticate(7L, "THERAPIST");
+        ResearchSampleEntity sample = sample("sample-1", 1L);
+        when(samples.findById("sample-1")).thenReturn(Optional.of(sample));
+        when(consents.findById(1L)).thenReturn(Optional.of(activeConsent()));
+        when(bindings.existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(1L, 7L, "THERAPIST"))
+            .thenReturn(true);
+        ResearchAnnotationEntity draft = annotation("sample-1", 7L, "DRAFT");
+        when(annotations.findForUpdate("sample-1")).thenReturn(Optional.of(draft));
+        var submitted = service.submitLabel(7L, "token", "sample-1");
+        assertThat(submitted.status()).isEqualTo("SUBMITTED");
+        assertThat(submitted.submittedAt()).isNotNull();
+        verify(revisions).save(any());
+    }
+
+    @Test void reviewerCannotApproveOwnSubmittedLabelEvenIfManager() {
+        authenticate(7L, "THERAPIST");
+        ResearchSampleEntity sample = sample("sample-1", 1L);
+        when(samples.findById("sample-1")).thenReturn(Optional.of(sample));
+        when(consents.findById(1L)).thenReturn(Optional.of(activeConsent()));
+        when(bindings.existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(1L, 7L, "THERAPIST"))
+            .thenReturn(true);
+        var submitted = annotation("sample-1", 7L, "SUBMITTED");
+        when(annotations.findForUpdate("sample-1")).thenReturn(Optional.of(submitted));
+        assertThatThrownBy(() -> service.reviewLabel(7L, "token", "sample-1", true, ""))
+            .isInstanceOf(ResponseStatusException.class)
+            .extracting(error -> ((ResponseStatusException) error).getStatusCode())
+            .isEqualTo(HttpStatus.FORBIDDEN);
+        verify(annotations, never()).save(any());
+    }
+
+    @Test void approvedLabelIsLockedAndReturnRequiresReason() {
+        authenticate(7L, "THERAPIST");
+        ResearchSampleEntity sample = sample("sample-1", 1L);
+        when(samples.findById("sample-1")).thenReturn(Optional.of(sample));
+        when(consents.findById(1L)).thenReturn(Optional.of(activeConsent()));
+        when(bindings.existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(1L, 7L, "THERAPIST"))
+            .thenReturn(true);
+        var submitted = annotation("sample-1", 8L, "SUBMITTED");
+        when(annotations.findForUpdate("sample-1")).thenReturn(Optional.of(submitted));
+        assertThatThrownBy(() -> service.reviewLabel(7L, "token", "sample-1", false, "  "))
+            .isInstanceOf(ResponseStatusException.class);
+        var reviewed = service.reviewLabel(7L, "token", "sample-1", true, "符合標準");
+        assertThat(reviewed.status()).isEqualTo("APPROVED");
+        assertThat(reviewed.reviewerUserId()).isEqualTo(7L);
+        assertThatThrownBy(() -> service.label(7L, "token", "sample-1",
+            "meets_requirement", "", "v1", "v1"))
+            .isInstanceOf(ResponseStatusException.class);
+    }
+
+    private ResearchSampleEntity sample(String id, Long participantId) {
+        ResearchSampleEntity sample = new ResearchSampleEntity();
+        sample.setId(id);
+        sample.setParticipantUserId(participantId);
+        return sample;
+    }
+
+    private ResearchAnnotationEntity annotation(String sampleId, Long annotator, String status) {
+        ResearchAnnotationEntity result = new ResearchAnnotationEntity();
+        result.setSampleId(sampleId);
+        result.setTherapistUserId(annotator);
+        result.setStatus(status);
+        result.setLabel("meets_requirement");
+        result.setLabelVersion("v1");
+        result.setActionDefinitionVersion("v1");
+        return result;
     }
 
     @Test void patientCanDeleteAllOwnResearchData() {

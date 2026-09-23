@@ -1,11 +1,13 @@
 package com.example.trainingsystems.service;
 
 import com.example.trainingsystems.entity.ResearchAnnotationEntity;
+import com.example.trainingsystems.entity.ResearchAnnotationRevisionEntity;
 import com.example.trainingsystems.entity.ResearchAuditEntity;
 import com.example.trainingsystems.entity.ResearchConsentEntity;
 import com.example.trainingsystems.entity.ResearchSampleEntity;
 import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.repository.ResearchAnnotationRepository;
+import com.example.trainingsystems.repository.ResearchAnnotationRevisionRepository;
 import com.example.trainingsystems.repository.ResearchAuditRepository;
 import com.example.trainingsystems.repository.ResearchConsentRepository;
 import com.example.trainingsystems.repository.ResearchSampleRepository;
@@ -49,6 +51,7 @@ public class ResearchDataService {
     private final ResearchConsentRepository consents;
     private final ResearchSampleRepository samples;
     private final ResearchAnnotationRepository annotations;
+    private final ResearchAnnotationRevisionRepository revisions;
     private final ResearchAuditRepository audits;
     private final ResearchSampleValidator validator;
     private final ResearchAuthorityService authority;
@@ -60,6 +63,7 @@ public class ResearchDataService {
         UserRepository users, UserBindingRepository bindings,
         CustomExerciseIdentityService identity, ResearchConsentRepository consents,
         ResearchSampleRepository samples, ResearchAnnotationRepository annotations,
+        ResearchAnnotationRevisionRepository revisions,
         ResearchAuditRepository audits, ResearchSampleValidator validator,
         ResearchAuthorityService authority,
         ObjectMapper mapper,
@@ -72,6 +76,7 @@ public class ResearchDataService {
         this.consents = consents;
         this.samples = samples;
         this.annotations = annotations;
+        this.revisions = revisions;
         this.audits = audits;
         this.validator = validator;
         this.authority = authority;
@@ -170,7 +175,8 @@ public class ResearchDataService {
             .stream().map(binding -> binding.getPatient().getId()).distinct().toList();
         if (patientIds.isEmpty()) return Page.empty(paging);
         List<Long> consentedIds = consents.findByUserIdInAndActiveTrue(patientIds)
-            .stream().map(ResearchConsentEntity::getUserId).toList();
+            .stream().filter(c -> currentConsentVersion.equals(c.getConsentVersion()))
+            .map(ResearchConsentEntity::getUserId).toList();
         if (consentedIds.isEmpty()) return Page.empty(paging);
         return samples.findByParticipantUserIdIn(consentedIds, paging).map(this::sampleView);
     }
@@ -203,12 +209,14 @@ public class ResearchDataService {
             actionDefinitionVersion == null ||
             !actionDefinitionVersion.matches("[A-Za-z0-9_.-]{1,64}") ||
             (note != null && note.length() > 1000)) throw badRequest("INVALID_RESEARCH_LABEL");
-        ResearchAnnotationEntity annotation = annotations.findById(sampleId)
+        ResearchAnnotationEntity annotation = annotations.findForUpdate(sampleId)
             .orElseGet(ResearchAnnotationEntity::new);
         if (annotation.getTherapistUserId() != null &&
             !annotation.getTherapistUserId().equals(userId)) {
             throw forbidden("LABEL_OWNED_BY_OTHER_THERAPIST");
         }
+        if ("SUBMITTED".equals(annotation.getStatus()) ||
+            "APPROVED".equals(annotation.getStatus())) throw conflict("RESEARCH_LABEL_LOCKED");
         annotation.setSampleId(sampleId);
         annotation.setTherapistUserId(userId);
         annotation.setLabel(label);
@@ -216,9 +224,76 @@ public class ResearchDataService {
         annotation.setLabelVersion(labelVersion);
         annotation.setActionDefinitionVersion(actionDefinitionVersion);
         annotation.setUpdatedAt(Instant.now());
-        annotation.setStatus("LABELED");
+        annotation.setStatus("DRAFT");
+        annotation.setRevision(annotation.getRevision() + 1);
         annotations.save(annotation);
-        audit(userId, "LABEL_SAVED", sampleId);
+        snapshot(annotation, userId);
+        audit(userId, "LABEL_DRAFT_SAVED", sampleId);
+        return annotationView(annotation);
+    }
+
+    @Transactional
+    public AnnotationView submitLabel(Long userId, String token, String sampleId) {
+        User annotator = requireRole(userId, token, THERAPIST);
+        authority.requireAnnotator(annotator);
+        ResearchSampleEntity sample = findSample(sampleId);
+        requireAccess(annotator, sample);
+        ResearchAnnotationEntity annotation = annotations.findForUpdate(sampleId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RESEARCH_LABEL_NOT_FOUND"));
+        if (!userId.equals(annotation.getTherapistUserId())) throw forbidden("LABEL_OWNED_BY_OTHER_THERAPIST");
+        if (!"DRAFT".equals(annotation.getStatus()) && !"RETURNED".equals(annotation.getStatus()) &&
+            !"LABELED".equals(annotation.getStatus())) throw conflict("RESEARCH_LABEL_NOT_EDITABLE");
+        annotation.setStatus("SUBMITTED");
+        annotation.setSubmittedAt(Instant.now());
+        annotation.setReviewNote(null);
+        annotation.setReviewerUserId(null);
+        annotation.setReviewedAt(null);
+        annotation.setRevision(annotation.getRevision() + 1);
+        annotation.setUpdatedAt(Instant.now());
+        annotations.save(annotation);
+        snapshot(annotation, userId);
+        audit(userId, "LABEL_SUBMITTED", sampleId);
+        return annotationView(annotation);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SampleView> reviewQueue(Long userId, String token, int page, int size) {
+        User reviewer = requireRole(userId, token, THERAPIST);
+        authority.requireReviewer(reviewer);
+        if (page < 0 || size < 1 || size > 50) throw badRequest("INVALID_PAGE");
+        List<Long> patientIds = bindings.findAllByLinkedUser_IdAndRelationshipIgnoreCase(userId, THERAPIST)
+            .stream().map(binding -> binding.getPatient().getId()).distinct().toList();
+        if (patientIds.isEmpty()) return Page.empty(PageRequest.of(page, size));
+        List<Long> consentedIds = consents.findByUserIdInAndActiveTrue(patientIds)
+            .stream().filter(c -> currentConsentVersion.equals(c.getConsentVersion()))
+            .map(ResearchConsentEntity::getUserId).toList();
+        if (consentedIds.isEmpty()) return Page.empty(PageRequest.of(page, size));
+        return annotations.findSubmittedForPatients(consentedIds, PageRequest.of(page, size))
+            .map(a -> sampleView(findSample(a.getSampleId())));
+    }
+
+    @Transactional
+    public AnnotationView reviewLabel(Long userId, String token, String sampleId,
+                                      boolean approve, String reviewNote) {
+        User reviewer = requireRole(userId, token, THERAPIST);
+        authority.requireReviewer(reviewer);
+        ResearchSampleEntity sample = findSample(sampleId);
+        requireAccess(reviewer, sample);
+        ResearchAnnotationEntity annotation = annotations.findForUpdate(sampleId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RESEARCH_LABEL_NOT_FOUND"));
+        if (!"SUBMITTED".equals(annotation.getStatus())) throw conflict("RESEARCH_LABEL_NOT_SUBMITTED");
+        if (userId.equals(annotation.getTherapistUserId())) throw forbidden("RESEARCH_SELF_REVIEW_DENIED");
+        if (reviewNote != null && reviewNote.length() > 1000) throw badRequest("INVALID_REVIEW_NOTE");
+        if (!approve && (reviewNote == null || reviewNote.isBlank())) throw badRequest("REVIEW_REASON_REQUIRED");
+        annotation.setStatus(approve ? "APPROVED" : "RETURNED");
+        annotation.setReviewerUserId(userId);
+        annotation.setReviewedAt(Instant.now());
+        annotation.setReviewNote(reviewNote == null ? "" : reviewNote.trim());
+        annotation.setUpdatedAt(Instant.now());
+        annotation.setRevision(annotation.getRevision() + 1);
+        annotations.save(annotation);
+        snapshot(annotation, userId);
+        audit(userId, approve ? "LABEL_APPROVED" : "LABEL_RETURNED", sampleId);
         return annotationView(annotation);
     }
 
@@ -228,6 +303,7 @@ public class ResearchDataService {
         ResearchSampleEntity sample = findSample(sampleId);
         if (!sample.getParticipantUserId().equals(userId)) throw forbidden("RESEARCH_ACCESS_DENIED");
         annotations.deleteById(sampleId);
+        revisions.deleteAll(revisions.findBySampleId(sampleId));
         samples.delete(sample);
         audit(userId, "SAMPLE_DELETED", sampleId);
     }
@@ -238,6 +314,7 @@ public class ResearchDataService {
         List<ResearchSampleEntity> owned = samples.findByParticipantUserId(userId);
         for (ResearchSampleEntity sample : owned) {
             annotations.findById(sample.getId()).ifPresent(annotations::delete);
+            revisions.deleteAll(revisions.findBySampleId(sample.getId()));
         }
         samples.deleteAll(owned);
         consents.findById(userId).ifPresent(consents::delete);
@@ -269,7 +346,8 @@ public class ResearchDataService {
         if (hasRole(viewer, THERAPIST) &&
             (authority.canAnnotate(viewer) || authority.canReview(viewer)) &&
             consents.findById(sample.getParticipantUserId())
-            .map(ResearchConsentEntity::isActive).orElse(false) && bindings
+            .map(c -> c.isActive() && currentConsentVersion.equals(c.getConsentVersion()))
+            .orElse(false) && bindings
             .existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(
                 sample.getParticipantUserId(), viewer.getId(), THERAPIST)) return;
         throw forbidden("RESEARCH_ACCESS_DENIED");
@@ -297,7 +375,26 @@ public class ResearchDataService {
     private AnnotationView annotationView(ResearchAnnotationEntity annotation) {
         return new AnnotationView(annotation.getLabel(), annotation.getNote(),
             annotation.getLabelVersion(), annotation.getActionDefinitionVersion(),
-            annotation.getStatus(), annotation.getUpdatedAt());
+            annotation.getStatus(), annotation.getUpdatedAt(), annotation.getRevision(),
+            annotation.getTherapistUserId(), annotation.getSubmittedAt(),
+            annotation.getReviewerUserId(), annotation.getReviewedAt(), annotation.getReviewNote());
+    }
+
+    private void snapshot(ResearchAnnotationEntity annotation, Long actorId) {
+        ResearchAnnotationRevisionEntity revision = new ResearchAnnotationRevisionEntity();
+        revision.setSampleId(annotation.getSampleId());
+        revision.setRevision(annotation.getRevision());
+        revision.setActorUserId(actorId);
+        revision.setAnnotatorUserId(annotation.getTherapistUserId());
+        revision.setLabel(annotation.getLabel());
+        revision.setNote(annotation.getNote());
+        revision.setLabelVersion(annotation.getLabelVersion());
+        revision.setActionDefinitionVersion(annotation.getActionDefinitionVersion());
+        revision.setStatus(annotation.getStatus());
+        revision.setReviewerUserId(annotation.getReviewerUserId());
+        revision.setReviewNote(annotation.getReviewNote());
+        revision.setCreatedAt(Instant.now());
+        revisions.save(revision);
     }
 
     private void audit(Long actorId, String action, String sampleId) {
@@ -347,6 +444,8 @@ public class ResearchDataService {
                              String movementSide, String cameraView, Instant capturedAt,
                              String annotationStatus) {}
     public record AnnotationView(String label, String note, String labelVersion,
-                                 String actionDefinitionVersion, String status, Instant updatedAt) {}
+                                 String actionDefinitionVersion, String status, Instant updatedAt,
+                                 int revision, Long annotatorUserId, Instant submittedAt,
+                                 Long reviewerUserId, Instant reviewedAt, String reviewNote) {}
     public record SampleDetail(SampleView sample, JsonNode payload, AnnotationView annotation) {}
 }

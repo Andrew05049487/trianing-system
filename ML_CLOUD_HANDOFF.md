@@ -14,6 +14,13 @@
 - Focused validation: `mvn -q '-Dtest=ResearchAuthorityServiceTest,ResearchDataServiceTest,AccountServiceTest' test` PASS. SQL Server, full suite, deployment and real-user acceptance NOT RUN.
 - Next: Stage C annotation draft/submit/review, Flutter reviewer UI, then export/retention and unified login. Do not redo Stage B or assume either SQL script is deployed.
 
+## Third-round Stage C backend checkpoint (2026-09-23)
+
+- `PUT /api/ml-research/samples/{id}/label` now saves DRAFT; `POST .../label/submit` moves it to SUBMITTED; `GET /api/ml-research/review-queue` lists bound/currently-consented submitted samples; `POST .../label/review` accepts `{approve, note}` and changes to APPROVED or RETURNED. Review requires separate reviewer grant, active patient binding/consent, and a different account than the annotator. Returned labels can be edited/resubmitted; submitted/approved labels are locked. `unassessable` remains a distinct label and must never enter training export.
+- Each annotation/review mutation creates an immutable snapshot in `research_annotation_revisions`; the current annotation row includes revision, reviewer, timestamps and return note. Legacy LABELED rows are migrated to DRAFT, never approved automatically.
+- Required additive SQL script: `sqlserver_migration_ml_research_review.sql`, AFTER the second-round base research migration. No migration has been run. Backend and Flutter must be deployed compatibly; old Flutter can still save a draft but cannot submit it.
+- Focused backend tests: `mvn -q '-Dtest=ResearchDataServiceTest,ResearchAuthorityServiceTest' test` PASS. Full suite, SQL Server, Render and Android E2E NOT RUN. Next: Flutter submit/review UI; then export/retention, unified login.
+
 ## Git and companion
 
 - Backend branch/base: `feat/rehab-ml-cloud-label` / `94132993d7d32ffc4b090ec429975fa3543275f5`; stage commit `f6caf96781884f5809222396cdc834128da63bc2`.
