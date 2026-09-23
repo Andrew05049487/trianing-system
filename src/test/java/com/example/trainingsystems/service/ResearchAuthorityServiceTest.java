@@ -85,6 +85,10 @@ class ResearchAuthorityServiceTest {
         authenticated(2L, "THERAPIST");
         when(bindings.findAllByLinkedUser_IdAndRelationshipIgnoreCase(2L, "THERAPIST"))
             .thenReturn(List.of(new UserBinding()));
+        ResearchGrantEntity annotatorGrant = new ResearchGrantEntity();
+        annotatorGrant.setCanAnnotate(true);
+        when(grants.findByUserIdAndStudyId(2L, ResearchAuthorityService.STUDY_ID))
+            .thenReturn(Optional.of(annotatorGrant));
         var submitted = service.requestReview(2L, "token");
         assertThat(submitted.status()).isEqualTo("PENDING");
         ResearchReviewRequestEntity request = new ResearchReviewRequestEntity();

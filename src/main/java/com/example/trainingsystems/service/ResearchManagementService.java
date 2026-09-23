@@ -99,7 +99,7 @@ public class ResearchManagementService {
                     !sample.getSubjectId().equals(consent.getSubjectId())) continue;
                 JsonNode stored = mapper.readTree(sample.getPayloadJson());
                 // Re-sanitize before export; never pass through unknown/direct identifiers.
-                ObjectNode safe = validator.validate(stored).safePayload();
+                ObjectNode safe = validator.validateStored(stored).safePayload();
                 safe.put("sampleId", sample.getId());
                 safe.put("subjectId", sample.getSubjectId());
                 if (!trainingFeatures.matches(safe)) continue;

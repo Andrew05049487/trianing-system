@@ -1,5 +1,11 @@
 # ML Cloud Backend Handoff
 
+## Third-round final security follow-up (2026-09-23)
+
+- Reviewer-request eligibility now also requires an existing per-study annotation grant, not merely therapist role and an active binding. A manager still must approve; UI switch alone never grants permission.
+- Export revalidates stored historical samples without the *new upload* one-year recency limit, while preserving shape/confidence/feature checks. This prevents policy-approved older samples from being incorrectly rejected solely because time passed. Expired, policy-less, withdrawn, unreviewed or unassessable samples remain excluded.
+- Focused `ResearchAuthorityServiceTest,ResearchManagementServiceTest,ResearchDataServiceTest` PASS. Final full-suite/package/SQL Server/Render validation pending. Flutter companion shared-login `13e954a`; backend Stage E `59e1efd` plus this follow-up pending commit.
+
 ## Third-round start (2026-09-23)
 
 - Backend local branch `feat/rehab-ml-cloud-label` at `8d743794e4d14d9ed914226e26ce090dfc9a7662`, clean. Flutter `feat/rehab-ml-poc` at `0b25cc52c29b6ed7da4c5fb092212a6b48e00fc5`, clean.

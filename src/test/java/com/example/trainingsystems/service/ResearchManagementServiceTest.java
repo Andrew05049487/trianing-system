@@ -91,6 +91,20 @@ class ResearchManagementServiceTest {
             .contains("\"sampleCount\":0");
     }
 
+    @Test void approvedOlderSampleUsesStoredValidationNotNewUploadAgeGate() throws Exception {
+        when(authority.authenticated(9L, "token")).thenReturn(manager);
+        when(annotations.findByStatus(eq("APPROVED"), any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(approved())));
+        ResearchSampleEntity older = sample();
+        ObjectNode payload = (ObjectNode) mapper.readTree(older.getPayloadJson());
+        payload.put("capturedAt", Instant.now().minusSeconds(400L * 86400).toString());
+        older.setPayloadJson(mapper.writeValueAsString(payload));
+        when(samples.findById("sample-1")).thenReturn(Optional.of(older));
+        when(consents.findById(1L)).thenReturn(Optional.of(consent(true)));
+        assertThat(entry(service.exportApproved(9L, "token"), "manifest.json"))
+            .contains("\"sampleCount\":1");
+    }
+
     private ResearchAnnotationEntity approved() {
         var a = new ResearchAnnotationEntity();
         a.setSampleId("sample-1");

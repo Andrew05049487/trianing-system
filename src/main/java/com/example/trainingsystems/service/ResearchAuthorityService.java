@@ -87,6 +87,7 @@ public class ResearchAuthorityService {
             bindings.findAllByLinkedUser_IdAndRelationshipIgnoreCase(id, "THERAPIST").isEmpty()) {
             throw forbidden("RESEARCH_REVIEW_REQUEST_DENIED");
         }
+        if (!canAnnotate(therapist)) throw forbidden("RESEARCH_STUDY_GRANT_REQUIRED");
         if (canReview(therapist)) throw conflict("RESEARCH_REVIEW_ALREADY_GRANTED");
         ResearchReviewRequestEntity request = requests.findByUserIdAndStudyId(id, STUDY_ID)
             .orElseGet(ResearchReviewRequestEntity::new);

@@ -30,6 +30,15 @@ public class ResearchSampleValidator {
     public ResearchSampleValidator(ObjectMapper mapper) { this.mapper = mapper; }
 
     public ValidatedSample validate(JsonNode input) {
+        return validate(input, true);
+    }
+
+    /** Recheck stored historical samples without applying the new-upload age gate. */
+    public ValidatedSample validateStored(JsonNode input) {
+        return validate(input, false);
+    }
+
+    private ValidatedSample validate(JsonNode input, boolean enforceRecentCapture) {
         if (input == null || !input.isObject()) throw invalid();
         try {
             if (mapper.writeValueAsBytes(input).length > MAX_JSON_BYTES) throw invalid();
@@ -47,8 +56,8 @@ public class ResearchSampleValidator {
         Instant capturedAt;
         try { capturedAt = Instant.parse(input.path("capturedAt").asText()); }
         catch (DateTimeParseException error) { throw invalid(); }
-        if (capturedAt.isAfter(Instant.now().plusSeconds(300)) ||
-            capturedAt.isBefore(Instant.now().minusSeconds(365L * 86400))) throw invalid();
+        if (enforceRecentCapture && (capturedAt.isAfter(Instant.now().plusSeconds(300)) ||
+            capturedAt.isBefore(Instant.now().minusSeconds(365L * 86400)))) throw invalid();
 
         JsonNode names = input.path("featureNames");
         JsonNode features = input.path("features");
