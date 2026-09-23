@@ -55,6 +55,7 @@ public class ResearchDataService {
     private final ResearchAuditRepository audits;
     private final ResearchSampleValidator validator;
     private final ResearchAuthorityService authority;
+    private final ResearchRetentionService retention;
     private final ObjectMapper mapper;
     private final boolean collectionEnabled;
     private final String currentConsentVersion;
@@ -66,6 +67,7 @@ public class ResearchDataService {
         ResearchAnnotationRevisionRepository revisions,
         ResearchAuditRepository audits, ResearchSampleValidator validator,
         ResearchAuthorityService authority,
+        ResearchRetentionService retention,
         ObjectMapper mapper,
         @Value("${research.collection-enabled:false}") boolean collectionEnabled,
         @Value("${research.consent-version:}") String currentConsentVersion
@@ -80,6 +82,7 @@ public class ResearchDataService {
         this.audits = audits;
         this.validator = validator;
         this.authority = authority;
+        this.retention = retention;
         this.mapper = mapper;
         this.collectionEnabled = collectionEnabled;
         this.currentConsentVersion = currentConsentVersion;
@@ -143,6 +146,10 @@ public class ResearchDataService {
         sample.setClientPayloadHash(fingerprint);
         sample.setCapturedAt(validated.capturedAt());
         sample.setUploadedAt(Instant.now());
+        var policy = retention.currentPolicy().orElseThrow(() ->
+            new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "RESEARCH_RETENTION_UNSET"));
+        sample.setRetentionPolicyVersion(policy.getPolicyVersion());
+        sample.setExpiresAt(sample.getUploadedAt().plusSeconds(policy.getRetentionDays() * 86400L));
         sample.setMovementSide(validated.side());
         sample.setCameraView(validated.cameraView());
         ObjectNode stored = validated.safePayload().deepCopy();
@@ -305,6 +312,7 @@ public class ResearchDataService {
         annotations.deleteById(sampleId);
         revisions.deleteAll(revisions.findBySampleId(sampleId));
         samples.delete(sample);
+        retention.recordDeletion(sample, "PATIENT_DELETED", userId);
         audit(userId, "SAMPLE_DELETED", sampleId);
     }
 
@@ -315,6 +323,7 @@ public class ResearchDataService {
         for (ResearchSampleEntity sample : owned) {
             annotations.findById(sample.getId()).ifPresent(annotations::delete);
             revisions.deleteAll(revisions.findBySampleId(sample.getId()));
+            retention.recordDeletion(sample, "PATIENT_DELETED", userId);
         }
         samples.deleteAll(owned);
         consents.findById(userId).ifPresent(consents::delete);
@@ -325,7 +334,8 @@ public class ResearchDataService {
         return new ConsentView(consent != null && consent.isActive(),
             consent == null ? null : consent.getSubjectId(),
             consent == null ? null : consent.getConsentVersion(),
-            currentConsentVersion, collectionEnabled && !currentConsentVersion.isBlank());
+            currentConsentVersion, collectionEnabled && !currentConsentVersion.isBlank() &&
+                retention.currentPolicy().isPresent());
     }
 
     private User authenticated(Long id, String token) {
@@ -354,7 +364,8 @@ public class ResearchDataService {
     }
 
     private void requireCollectionEnabled() {
-        if (!collectionEnabled || currentConsentVersion.isBlank()) {
+        if (!collectionEnabled || currentConsentVersion.isBlank() ||
+            retention.currentPolicy().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                 "RESEARCH_COLLECTION_NOT_ENABLED");
         }

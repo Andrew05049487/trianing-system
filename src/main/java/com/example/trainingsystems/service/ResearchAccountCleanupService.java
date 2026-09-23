@@ -22,17 +22,20 @@ public class ResearchAccountCleanupService {
     private final ResearchConsentRepository consents;
     private final ResearchGrantRepository grants;
     private final ResearchReviewRequestRepository reviewRequests;
+    private final ResearchRetentionService retention;
 
     public ResearchAccountCleanupService(ResearchSampleRepository samples,
         ResearchAnnotationRepository annotations, ResearchAnnotationRevisionRepository revisions,
         ResearchConsentRepository consents,
-        ResearchGrantRepository grants, ResearchReviewRequestRepository reviewRequests) {
+        ResearchGrantRepository grants, ResearchReviewRequestRepository reviewRequests,
+        ResearchRetentionService retention) {
         this.samples = samples;
         this.annotations = annotations;
         this.revisions = revisions;
         this.consents = consents;
         this.grants = grants;
         this.reviewRequests = reviewRequests;
+        this.retention = retention;
     }
 
     public void deleteForAccount(Long userId) {
@@ -46,6 +49,7 @@ public class ResearchAccountCleanupService {
         for (ResearchSampleEntity sample : owned) {
             annotations.findById(sample.getId()).ifPresent(annotations::delete);
             revisions.deleteAll(revisions.findBySampleId(sample.getId()));
+            retention.recordDeletion(sample, "ACCOUNT_DELETED", userId);
         }
         samples.deleteAll(owned);
         for (var annotation : annotations.findByTherapistUserId(userId)) {

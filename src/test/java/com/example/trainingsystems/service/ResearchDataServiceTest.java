@@ -3,6 +3,7 @@ package com.example.trainingsystems.service;
 import com.example.trainingsystems.entity.ResearchAnnotationEntity;
 import com.example.trainingsystems.entity.ResearchConsentEntity;
 import com.example.trainingsystems.entity.ResearchSampleEntity;
+import com.example.trainingsystems.entity.ResearchRetentionPolicyEntity;
 import com.example.trainingsystems.entity.User;
 import com.example.trainingsystems.entity.UserBinding;
 import com.example.trainingsystems.repository.ResearchAnnotationRepository;
@@ -49,6 +50,7 @@ class ResearchDataServiceTest {
     @Mock ResearchAnnotationRevisionRepository revisions;
     @Mock ResearchAuditRepository audits;
     @Mock ResearchAuthorityService authority;
+    @Mock ResearchRetentionService retention;
     private final ObjectMapper mapper = new ObjectMapper();
     private ResearchDataService service;
     private ResearchSampleValidator validator;
@@ -57,7 +59,12 @@ class ResearchDataServiceTest {
     void setUp() {
         validator = new ResearchSampleValidator(mapper);
         service = new ResearchDataService(users, bindings, identity, consents,
-            samples, annotations, revisions, audits, validator, authority, mapper, true, "study-v1");
+            samples, annotations, revisions, audits, validator, authority,
+            retention, mapper, true, "study-v1");
+        ResearchRetentionPolicyEntity policy = new ResearchRetentionPolicyEntity();
+        policy.setPolicyVersion("test-policy-v1");
+        policy.setRetentionDays(30);
+        org.mockito.Mockito.lenient().when(retention.currentPolicy()).thenReturn(Optional.of(policy));
     }
 
     private void authenticate(long id, String role) {
@@ -122,6 +129,17 @@ class ResearchDataServiceTest {
         assertThat(result.subjectId()).isNotBlank();
         verify(consents).save(any());
         verify(audits).save(any());
+    }
+
+    @Test void cloudCollectionStaysClosedWithoutApprovedRetentionPolicy() {
+        authenticate(1L, "PATIENT");
+        when(consents.findById(1L)).thenReturn(Optional.empty());
+        when(retention.currentPolicy()).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.setConsent(1L, "token", true, "study-v1"))
+            .isInstanceOf(ResponseStatusException.class)
+            .extracting(error -> ((ResponseStatusException) error).getStatusCode())
+            .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        verify(consents, never()).save(any());
     }
 
     @Test void invalidIdentityAndTherapistCannotConsent() {

@@ -118,6 +118,7 @@ class ResearchManagementServiceTest {
         sample.setId("sample-1");
         sample.setParticipantUserId(1L);
         sample.setSubjectId("subject-1");
+        sample.setExpiresAt(Instant.now().plusSeconds(86400));
         ObjectNode json = mapper.createObjectNode();
         json.put("schemaVersion", 1);
         json.put("actionId", "standing_knee_raise");

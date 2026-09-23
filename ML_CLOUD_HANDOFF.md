@@ -27,6 +27,13 @@
 - New additive `sqlserver_migration_ml_research_export.sql` creates export audit table; not executed. Export is capped at 500 approved rows / 20 MB uncompressed to avoid unbounded Render memory. Larger datasets need a reviewed batch mechanism, not silent truncation.
 - Focused `mvn -q '-Dtest=ResearchManagementServiceTest' test` PASS. No real labeled dataset, model training, SQL Server, Render or Android E2E. Next: Flutter minimal manager UI, retention and unified login.
 
+## Third-round Stage E retention checkpoint (2026-09-23)
+
+- Added immutable per-study retention policy versions (`retentionDays`, `effectiveAt`, approval reference, setter, action DELETE) and deletion-event records. A daily UTC 03:00 batch and manager-triggered batch process up to 100 expired samples transactionally. Re-running after deletion finds no rows. Patient/account deletion records a distinct reason; consent withdrawal remains distinct in existing research audit.
+- On upload, the active policy version and calculated expiry are stored per sample. No policy means backend research consent/upload is unavailable even if collection flag is set; policy creation alone does not enable collection. Existing legacy samples with no expiry are not silently made permanent or deleted; they need a reviewed disposition. Export excludes expired or policy-less samples.
+- New additive `sqlserver_migration_ml_research_retention.sql`; no duration is inserted by migration. It has NOT been run. No SQL Server/Render/Android validation or formal governance approval.
+- Focused `mvn -q '-Dtest=ResearchRetentionServiceTest,ResearchManagementServiceTest,ResearchDataServiceTest' test` PASS. Next: complete Flutter retention UI tests, then shared login. Backup/export copies cannot be instantly revoked by main-DB deletion; governance procedure remains required.
+
 ## Git and companion
 
 - Backend branch/base: `feat/rehab-ml-cloud-label` / `94132993d7d32ffc4b090ec429975fa3543275f5`; stage commit `f6caf96781884f5809222396cdc834128da63bc2`.

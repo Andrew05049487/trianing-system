@@ -92,6 +92,7 @@ public class ResearchManagementService {
                     annotation.getReviewerUserId().equals(annotation.getTherapistUserId())) continue;
                 ResearchSampleEntity sample = samples.findById(annotation.getSampleId()).orElse(null);
                 if (sample == null) continue;
+                if (sample.getExpiresAt() == null || !sample.getExpiresAt().isAfter(Instant.now())) continue;
                 ResearchConsentEntity consent = consents.findById(sample.getParticipantUserId()).orElse(null);
                 if (consent == null || !consent.isActive() ||
                     !consentVersion.equals(consent.getConsentVersion()) ||

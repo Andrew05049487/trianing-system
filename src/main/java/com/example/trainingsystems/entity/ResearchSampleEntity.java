@@ -47,4 +47,10 @@ public class ResearchSampleEntity {
 
     @Column(name = "client_payload_hash", nullable = false, length = 64)
     private String clientPayloadHash;
+
+    @Column(name = "retention_policy_version", length = 64)
+    private String retentionPolicyVersion;
+
+    @Column(name = "expires_at")
+    private Instant expiresAt;
 }
