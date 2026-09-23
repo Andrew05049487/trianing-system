@@ -1,0 +1,343 @@
+package com.example.trainingsystems.service;
+
+import com.example.trainingsystems.entity.ResearchAnnotationEntity;
+import com.example.trainingsystems.entity.ResearchAuditEntity;
+import com.example.trainingsystems.entity.ResearchConsentEntity;
+import com.example.trainingsystems.entity.ResearchSampleEntity;
+import com.example.trainingsystems.entity.User;
+import com.example.trainingsystems.repository.ResearchAnnotationRepository;
+import com.example.trainingsystems.repository.ResearchAuditRepository;
+import com.example.trainingsystems.repository.ResearchConsentRepository;
+import com.example.trainingsystems.repository.ResearchSampleRepository;
+import com.example.trainingsystems.repository.UserBindingRepository;
+import com.example.trainingsystems.repository.UserRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
+@Service
+public class ResearchDataService {
+    private static final String PATIENT = "PATIENT";
+    private static final String THERAPIST = "THERAPIST";
+    private static final Set<String> LABELS = Set.of(
+        "meets_requirement", "insufficient_range", "trunk_compensation", "unassessable"
+    );
+
+    private final UserRepository users;
+    private final UserBindingRepository bindings;
+    private final CustomExerciseIdentityService identity;
+    private final ResearchConsentRepository consents;
+    private final ResearchSampleRepository samples;
+    private final ResearchAnnotationRepository annotations;
+    private final ResearchAuditRepository audits;
+    private final ResearchSampleValidator validator;
+    private final ObjectMapper mapper;
+    private final boolean collectionEnabled;
+    private final String currentConsentVersion;
+
+    public ResearchDataService(
+        UserRepository users, UserBindingRepository bindings,
+        CustomExerciseIdentityService identity, ResearchConsentRepository consents,
+        ResearchSampleRepository samples, ResearchAnnotationRepository annotations,
+        ResearchAuditRepository audits, ResearchSampleValidator validator,
+        ObjectMapper mapper,
+        @Value("${research.collection-enabled:false}") boolean collectionEnabled,
+        @Value("${research.consent-version:}") String currentConsentVersion
+    ) {
+        this.users = users;
+        this.bindings = bindings;
+        this.identity = identity;
+        this.consents = consents;
+        this.samples = samples;
+        this.annotations = annotations;
+        this.audits = audits;
+        this.validator = validator;
+        this.mapper = mapper;
+        this.collectionEnabled = collectionEnabled;
+        this.currentConsentVersion = currentConsentVersion;
+    }
+
+    @Transactional(readOnly = true)
+    public ConsentView consent(Long userId, String token) {
+        requireRole(userId, token, PATIENT);
+        return consentView(consents.findById(userId).orElse(null));
+    }
+
+    @Transactional
+    public ConsentView setConsent(Long userId, String token, boolean agree, String version) {
+        requireRole(userId, token, PATIENT);
+        ResearchConsentEntity consent = consents.findById(userId)
+            .orElseGet(ResearchConsentEntity::new);
+        if (agree) {
+            requireCollectionEnabled();
+            if (!currentConsentVersion.equals(version)) throw badRequest("CONSENT_VERSION_MISMATCH");
+            if (consent.getSubjectId() == null) consent.setSubjectId(UUID.randomUUID().toString());
+            consent.setConsentVersion(version);
+            consent.setConsentedAt(Instant.now());
+            consent.setWithdrawnAt(null);
+            consent.setActive(true);
+        } else {
+            if (consent.getSubjectId() == null) return consentView(null);
+            consent.setActive(false);
+            consent.setWithdrawnAt(Instant.now());
+        }
+        consent.setUserId(userId);
+        consents.save(consent);
+        audit(userId, agree ? "CONSENT_GRANTED" : "CONSENT_WITHDRAWN", null);
+        return consentView(consent);
+    }
+
+    @Transactional
+    public SampleView upload(Long userId, String token, JsonNode payload) {
+        requireRole(userId, token, PATIENT);
+        requireCollectionEnabled();
+        ResearchConsentEntity consent = consents.findById(userId)
+            .orElseThrow(() -> forbidden("RESEARCH_CONSENT_REQUIRED"));
+        if (!consent.isActive() || !currentConsentVersion.equals(consent.getConsentVersion())) {
+            throw forbidden("RESEARCH_CONSENT_REQUIRED");
+        }
+        ResearchSampleValidator.ValidatedSample validated = validator.validate(payload);
+        String canonical = writeJson(validated.safePayload());
+        String fingerprint = sha256(canonical);
+        Optional<ResearchSampleEntity> previous = samples
+            .findByParticipantUserIdAndClientSampleId(userId, validated.clientId());
+        if (previous.isPresent()) {
+            if (!fingerprint.equals(previous.get().getClientPayloadHash())) {
+                throw conflict("RESEARCH_SAMPLE_ID_CONFLICT");
+            }
+            return sampleView(previous.get());
+        }
+        ResearchSampleEntity sample = new ResearchSampleEntity();
+        sample.setId(UUID.randomUUID().toString());
+        sample.setParticipantUserId(userId);
+        sample.setSubjectId(consent.getSubjectId());
+        sample.setClientSampleId(validated.clientId());
+        sample.setClientPayloadHash(fingerprint);
+        sample.setCapturedAt(validated.capturedAt());
+        sample.setUploadedAt(Instant.now());
+        sample.setMovementSide(validated.side());
+        sample.setCameraView(validated.cameraView());
+        ObjectNode stored = validated.safePayload().deepCopy();
+        stored.put("sampleId", sample.getId());
+        stored.put("subjectId", consent.getSubjectId());
+        sample.setPayloadJson(writeJson(stored));
+        try {
+            samples.saveAndFlush(sample);
+        } catch (DataIntegrityViolationException error) {
+            throw conflict("RESEARCH_SAMPLE_ID_CONFLICT");
+        }
+        audit(userId, "SAMPLE_UPLOADED", sample.getId());
+        return sampleView(sample);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<SampleView> list(Long userId, String token, int page, int size) {
+        User viewer = authenticated(userId, token);
+        if (page < 0 || size < 1 || size > 50) throw badRequest("INVALID_PAGE");
+        PageRequest paging = PageRequest.of(page, size, Sort.by("capturedAt").descending());
+        if (hasRole(viewer, PATIENT)) {
+            return samples.findByParticipantUserId(userId, paging).map(this::sampleView);
+        }
+        if (!hasRole(viewer, THERAPIST)) throw forbidden("RESEARCH_ROLE_DENIED");
+        List<Long> patientIds = bindings
+            .findAllByLinkedUser_IdAndRelationshipIgnoreCase(userId, THERAPIST)
+            .stream().map(binding -> binding.getPatient().getId()).distinct().toList();
+        if (patientIds.isEmpty()) return Page.empty(paging);
+        List<Long> consentedIds = consents.findByUserIdInAndActiveTrue(patientIds)
+            .stream().map(ResearchConsentEntity::getUserId).toList();
+        if (consentedIds.isEmpty()) return Page.empty(paging);
+        return samples.findByParticipantUserIdIn(consentedIds, paging).map(this::sampleView);
+    }
+
+    @Transactional(readOnly = true)
+    public SampleDetail detail(Long userId, String token, String sampleId) {
+        User viewer = authenticated(userId, token);
+        ResearchSampleEntity sample = findSample(sampleId);
+        requireAccess(viewer, sample);
+        ResearchAnnotationEntity annotation = annotations.findById(sampleId).orElse(null);
+        try {
+            return new SampleDetail(sampleView(sample), mapper.readTree(sample.getPayloadJson()),
+                annotation == null ? null : annotationView(annotation));
+        } catch (JsonProcessingException error) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                "RESEARCH_SAMPLE_CORRUPT");
+        }
+    }
+
+    @Transactional
+    public AnnotationView label(Long userId, String token, String sampleId,
+                                String label, String note, String labelVersion,
+                                String actionDefinitionVersion) {
+        User therapist = requireRole(userId, token, THERAPIST);
+        ResearchSampleEntity sample = findSample(sampleId);
+        requireAccess(therapist, sample);
+        if (!LABELS.contains(label) ||
+            labelVersion == null || !labelVersion.matches("[A-Za-z0-9_.-]{1,64}") ||
+            actionDefinitionVersion == null ||
+            !actionDefinitionVersion.matches("[A-Za-z0-9_.-]{1,64}") ||
+            (note != null && note.length() > 1000)) throw badRequest("INVALID_RESEARCH_LABEL");
+        ResearchAnnotationEntity annotation = annotations.findById(sampleId)
+            .orElseGet(ResearchAnnotationEntity::new);
+        if (annotation.getTherapistUserId() != null &&
+            !annotation.getTherapistUserId().equals(userId)) {
+            throw forbidden("LABEL_OWNED_BY_OTHER_THERAPIST");
+        }
+        annotation.setSampleId(sampleId);
+        annotation.setTherapistUserId(userId);
+        annotation.setLabel(label);
+        annotation.setNote(note == null ? "" : note.trim());
+        annotation.setLabelVersion(labelVersion);
+        annotation.setActionDefinitionVersion(actionDefinitionVersion);
+        annotation.setUpdatedAt(Instant.now());
+        annotation.setStatus("LABELED");
+        annotations.save(annotation);
+        audit(userId, "LABEL_SAVED", sampleId);
+        return annotationView(annotation);
+    }
+
+    @Transactional
+    public void deleteOwnSample(Long userId, String token, String sampleId) {
+        requireRole(userId, token, PATIENT);
+        ResearchSampleEntity sample = findSample(sampleId);
+        if (!sample.getParticipantUserId().equals(userId)) throw forbidden("RESEARCH_ACCESS_DENIED");
+        annotations.deleteById(sampleId);
+        samples.delete(sample);
+        audit(userId, "SAMPLE_DELETED", sampleId);
+    }
+
+    @Transactional
+    public void deleteMyData(Long userId, String token) {
+        requireRole(userId, token, PATIENT);
+        List<ResearchSampleEntity> owned = samples.findByParticipantUserId(userId);
+        for (ResearchSampleEntity sample : owned) {
+            annotations.findById(sample.getId()).ifPresent(annotations::delete);
+        }
+        samples.deleteAll(owned);
+        consents.findById(userId).ifPresent(consents::delete);
+        audit(userId, "DATA_DELETED", null);
+    }
+
+    private ConsentView consentView(ResearchConsentEntity consent) {
+        return new ConsentView(consent != null && consent.isActive(),
+            consent == null ? null : consent.getSubjectId(),
+            consent == null ? null : consent.getConsentVersion(),
+            currentConsentVersion, collectionEnabled && !currentConsentVersion.isBlank());
+    }
+
+    private User authenticated(Long id, String token) {
+        if (id == null || token == null || token.isBlank()) throw unauthorized();
+        User user = users.findById(id).orElseThrow(this::unauthorized);
+        if (!identity.isConfigured() || !identity.isValid(user, token)) throw unauthorized();
+        return user;
+    }
+
+    private User requireRole(Long id, String token, String role) {
+        User user = authenticated(id, token);
+        if (!hasRole(user, role)) throw forbidden("RESEARCH_ROLE_DENIED");
+        return user;
+    }
+
+    private void requireAccess(User viewer, ResearchSampleEntity sample) {
+        if (hasRole(viewer, PATIENT) && viewer.getId().equals(sample.getParticipantUserId())) return;
+        if (hasRole(viewer, THERAPIST) && consents.findById(sample.getParticipantUserId())
+            .map(ResearchConsentEntity::isActive).orElse(false) && bindings
+            .existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(
+                sample.getParticipantUserId(), viewer.getId(), THERAPIST)) return;
+        throw forbidden("RESEARCH_ACCESS_DENIED");
+    }
+
+    private void requireCollectionEnabled() {
+        if (!collectionEnabled || currentConsentVersion.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "RESEARCH_COLLECTION_NOT_ENABLED");
+        }
+    }
+
+    private ResearchSampleEntity findSample(String id) {
+        return samples.findById(id).orElseThrow(() ->
+            new ResponseStatusException(HttpStatus.NOT_FOUND, "RESEARCH_SAMPLE_NOT_FOUND"));
+    }
+
+    private SampleView sampleView(ResearchSampleEntity sample) {
+        ResearchAnnotationEntity annotation = annotations.findById(sample.getId()).orElse(null);
+        return new SampleView(sample.getId(), sample.getClientSampleId(), sample.getSubjectId(),
+            sample.getMovementSide(), sample.getCameraView(), sample.getCapturedAt(),
+            annotation == null ? "UNLABELED" : annotation.getStatus());
+    }
+
+    private AnnotationView annotationView(ResearchAnnotationEntity annotation) {
+        return new AnnotationView(annotation.getLabel(), annotation.getNote(),
+            annotation.getLabelVersion(), annotation.getActionDefinitionVersion(),
+            annotation.getStatus(), annotation.getUpdatedAt());
+    }
+
+    private void audit(Long actorId, String action, String sampleId) {
+        ResearchAuditEntity event = new ResearchAuditEntity();
+        event.setActorUserId(actorId);
+        event.setAction(action);
+        event.setSampleId(sampleId);
+        event.setCreatedAt(Instant.now());
+        audits.save(event);
+    }
+
+    private String writeJson(JsonNode node) {
+        try { return mapper.writeValueAsString(node); }
+        catch (JsonProcessingException error) { throw badRequest("INVALID_RESEARCH_SAMPLE"); }
+    }
+
+    private static String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException error) { throw new IllegalStateException(error); }
+    }
+
+    private static boolean hasRole(User user, String role) {
+        return role.equalsIgnoreCase(user.getRole());
+    }
+
+    private ResponseStatusException unauthorized() {
+        return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "RESEARCH_AUTH_REQUIRED");
+    }
+
+    private static ResponseStatusException forbidden(String code) {
+        return new ResponseStatusException(HttpStatus.FORBIDDEN, code);
+    }
+
+    private static ResponseStatusException badRequest(String code) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, code);
+    }
+
+    private static ResponseStatusException conflict(String code) {
+        return new ResponseStatusException(HttpStatus.CONFLICT, code);
+    }
+
+    public record ConsentView(boolean active, String subjectId, String consentVersion,
+                              String currentVersion, boolean available) {}
+    public record SampleView(String id, String clientSampleId, String subjectId,
+                             String movementSide, String cameraView, Instant capturedAt,
+                             String annotationStatus) {}
+    public record AnnotationView(String label, String note, String labelVersion,
+                                 String actionDefinitionVersion, String status, Instant updatedAt) {}
+    public record SampleDetail(SampleView sample, JsonNode payload, AnnotationView annotation) {}
+}

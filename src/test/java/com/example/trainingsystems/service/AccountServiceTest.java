@@ -38,6 +38,7 @@ class AccountServiceTest {
     private FriendRequestRepository friendRequests;
     private FriendshipRepository friendships;
     private UserAvatarRepository avatars;
+    private ResearchAccountCleanupService researchCleanup;
     private AccountService service;
 
     @BeforeEach
@@ -54,6 +55,7 @@ class AccountServiceTest {
         friendRequests = mock(FriendRequestRepository.class);
         friendships = mock(FriendshipRepository.class);
         avatars = mock(UserAvatarRepository.class);
+        researchCleanup = mock(ResearchAccountCleanupService.class);
         service = new AccountService(
             users,
             identity,
@@ -66,7 +68,8 @@ class AccountServiceTest {
             bindings,
             friendRequests,
             friendships,
-            avatars
+            avatars,
+            researchCleanup
         );
         when(users.saveAndFlush(any(User.class))).thenAnswer(call -> call.getArgument(0));
         when(identity.issueToken(any(User.class))).thenReturn("signed-token");
@@ -280,6 +283,7 @@ class AccountServiceTest {
         verify(bindings).findByPatient_IdOrLinkedUser_Id(16L, 16L);
         verify(friendRequests).findBySenderIdOrReceiverId(16L, 16L);
         verify(friendships).findByUserLowIdOrUserHighId(16L, 16L);
+        verify(researchCleanup).deleteForAccount(16L);
         verify(avatars).deleteById(16L);
         verify(avatars).flush();
         verify(users).delete(user);
