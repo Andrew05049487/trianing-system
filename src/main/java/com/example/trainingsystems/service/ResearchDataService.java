@@ -51,6 +51,7 @@ public class ResearchDataService {
     private final ResearchAnnotationRepository annotations;
     private final ResearchAuditRepository audits;
     private final ResearchSampleValidator validator;
+    private final ResearchAuthorityService authority;
     private final ObjectMapper mapper;
     private final boolean collectionEnabled;
     private final String currentConsentVersion;
@@ -60,6 +61,7 @@ public class ResearchDataService {
         CustomExerciseIdentityService identity, ResearchConsentRepository consents,
         ResearchSampleRepository samples, ResearchAnnotationRepository annotations,
         ResearchAuditRepository audits, ResearchSampleValidator validator,
+        ResearchAuthorityService authority,
         ObjectMapper mapper,
         @Value("${research.collection-enabled:false}") boolean collectionEnabled,
         @Value("${research.consent-version:}") String currentConsentVersion
@@ -72,6 +74,7 @@ public class ResearchDataService {
         this.annotations = annotations;
         this.audits = audits;
         this.validator = validator;
+        this.authority = authority;
         this.mapper = mapper;
         this.collectionEnabled = collectionEnabled;
         this.currentConsentVersion = currentConsentVersion;
@@ -159,6 +162,9 @@ public class ResearchDataService {
             return samples.findByParticipantUserId(userId, paging).map(this::sampleView);
         }
         if (!hasRole(viewer, THERAPIST)) throw forbidden("RESEARCH_ROLE_DENIED");
+        if (!authority.canAnnotate(viewer) && !authority.canReview(viewer)) {
+            throw forbidden("RESEARCH_ACCESS_DENIED");
+        }
         List<Long> patientIds = bindings
             .findAllByLinkedUser_IdAndRelationshipIgnoreCase(userId, THERAPIST)
             .stream().map(binding -> binding.getPatient().getId()).distinct().toList();
@@ -189,6 +195,7 @@ public class ResearchDataService {
                                 String label, String note, String labelVersion,
                                 String actionDefinitionVersion) {
         User therapist = requireRole(userId, token, THERAPIST);
+        authority.requireAnnotator(therapist);
         ResearchSampleEntity sample = findSample(sampleId);
         requireAccess(therapist, sample);
         if (!LABELS.contains(label) ||
@@ -259,7 +266,9 @@ public class ResearchDataService {
 
     private void requireAccess(User viewer, ResearchSampleEntity sample) {
         if (hasRole(viewer, PATIENT) && viewer.getId().equals(sample.getParticipantUserId())) return;
-        if (hasRole(viewer, THERAPIST) && consents.findById(sample.getParticipantUserId())
+        if (hasRole(viewer, THERAPIST) &&
+            (authority.canAnnotate(viewer) || authority.canReview(viewer)) &&
+            consents.findById(sample.getParticipantUserId())
             .map(ResearchConsentEntity::isActive).orElse(false) && bindings
             .existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(
                 sample.getParticipantUserId(), viewer.getId(), THERAPIST)) return;

@@ -1,5 +1,19 @@
 # ML Cloud Backend Handoff
 
+## Third-round start (2026-09-23)
+
+- Backend local branch `feat/rehab-ml-cloud-label` at `8d743794e4d14d9ed914226e26ce090dfc9a7662`, clean. Flutter `feat/rehab-ml-poc` at `0b25cc52c29b6ed7da4c5fb092212a6b48e00fc5`, clean.
+- `User.role` remains one string (PATIENT/THERAPIST); `/api/auth/login` already returns role and HMAC token. Add per-study research grants without replacing business role. Google remains patient-only.
+- Next: controlled first-manager authorization, reviewer grants, review/export/retention; small tests and commits. No push/merge/deploy/production SQL.
+
+## Third-round Stage B checkpoint (2026-09-23)
+
+- Added additive per-study `research_grants`, `research_review_requests`, and `research_grant_audit` models, repositories, API and explicit SQL Server migration. Existing PATIENT/THERAPIST role and HMAC identity stay unchanged.
+- `ResearchAuthorityService` gates annotation, review and management; bound therapists may request review, while an existing manager must decide. Self-approval and removal of the last manager are rejected. Therapist sample access now also requires a research grant.
+- First manager requires a controlled, manual `sqlserver_bootstrap_first_research_manager.sql` with an explicitly verified existing user ID. Neither script has been run. No public bootstrap endpoint or built-in password exists.
+- Focused validation: `mvn -q '-Dtest=ResearchAuthorityServiceTest,ResearchDataServiceTest,AccountServiceTest' test` PASS. SQL Server, full suite, deployment and real-user acceptance NOT RUN.
+- Next: Stage C annotation draft/submit/review, Flutter reviewer UI, then export/retention and unified login. Do not redo Stage B or assume either SQL script is deployed.
+
 ## Git and companion
 
 - Backend branch/base: `feat/rehab-ml-cloud-label` / `94132993d7d32ffc4b090ec429975fa3543275f5`; stage commit `f6caf96781884f5809222396cdc834128da63bc2`.

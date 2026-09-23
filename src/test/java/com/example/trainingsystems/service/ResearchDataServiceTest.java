@@ -46,6 +46,7 @@ class ResearchDataServiceTest {
     @Mock ResearchSampleRepository samples;
     @Mock ResearchAnnotationRepository annotations;
     @Mock ResearchAuditRepository audits;
+    @Mock ResearchAuthorityService authority;
     private final ObjectMapper mapper = new ObjectMapper();
     private ResearchDataService service;
     private ResearchSampleValidator validator;
@@ -54,7 +55,7 @@ class ResearchDataServiceTest {
     void setUp() {
         validator = new ResearchSampleValidator(mapper);
         service = new ResearchDataService(users, bindings, identity, consents,
-            samples, annotations, audits, validator, mapper, true, "study-v1");
+            samples, annotations, audits, validator, authority, mapper, true, "study-v1");
     }
 
     private void authenticate(long id, String role) {
@@ -64,6 +65,9 @@ class ResearchDataServiceTest {
         when(users.findById(id)).thenReturn(Optional.of(user));
         when(identity.isConfigured()).thenReturn(true);
         when(identity.isValid(user, "token")).thenReturn(true);
+        if ("THERAPIST".equals(role)) {
+            org.mockito.Mockito.lenient().when(authority.canAnnotate(user)).thenReturn(true);
+        }
     }
 
     private ResearchConsentEntity activeConsent() {
