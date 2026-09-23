@@ -1,5 +1,12 @@
 # ML Cloud Backend Handoff
 
+## Third-round final validation checkpoint (2026-09-23)
+
+- Current backend branch/HEAD `feat/rehab-ml-cloud-label` / `e905fe6`; Flutter companion `feat/rehab-ml-poc` / `13e954a` before final docs checkpoint. All implementation checkpoints committed; no push/merge/PR/deploy/production SQL.
+- Full `mvn test` ONCE: 229 tests, 227 PASS, two FAIL: `LegacyBindingControllerSecurityTest.legacyEndpointCannotCreateTherapistBindingWithoutHmac` (expected 403, got 404) and `UserJsonSecurityTest.userJsonNeverExposesPasswordHashOrGoogleSubject` (expected false, got true). Auth/security code/tests were untouched by this third-round diff; do not cross-scope patch them here. `mvn package -DskipTests` PASS.
+- No SQL Server test DB/Render deployment or formal production migration. Required manual order: second-round base research SQL, then authority, review, export, retention scripts; controlled first-manager bootstrap only after explicit account verification, backup and approval. `spring.jpa.hibernate.ddl-auto=update` does not replace review of explicit SQL scripts. No formal retention duration has been configured; default collection flag remains false.
+- Frontend full `flutter test` 436 PASS/7 FAIL, debug APK PASS. Real Android/device integration and actual database/API E2E NOT RUN. Do not claim system ready for real participants.
+
 ## Third-round final security follow-up (2026-09-23)
 
 - Reviewer-request eligibility now also requires an existing per-study annotation grant, not merely therapist role and an active binding. A manager still must approve; UI switch alone never grants permission.
