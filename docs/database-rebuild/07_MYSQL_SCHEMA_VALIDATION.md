@@ -4,25 +4,42 @@
 
 | 驗收項 | 結果 | 證據／範圍 |
 |---|---|---|
-| 後端分支／工作樹 | PASS | feat/rehab-ml-cloud-label，起始HEAD d6fbb2e548e829823ce501d0ae3cf9ea47b3f28c，起始乾淨 |
+| 後端分支／工作樹 | PASS | R2：feat/rehab-ml-cloud-label，起始HEAD d6fbb2e548e829823ce501d0ae3cf9ea47b3f28c；R2.5基準1319b30e370ec51e6b9c9eea150cf028e9407684，詳見09 |
 | MySQL client | PASS | `C:/Program Files/MySQL/MySQL Server 8.4/bin/mysql.exe --version` → 8.4.11 Win64 |
 | MySQL84 service | PASS | Get-Service → Running；不等於SQL登入成功 |
-| SQL登入 | BLOCKED | 本機TCP root無密碼唯讀VERSION查詢 → ERROR 1045 (28000), using password: NO |
-| 建立隔離測試庫 | NOT RUN | 未取得登入；沒有CREATE／DROP／DML，未碰任何已有schema |
-| V001／V002實際MySQL execution | NOT TESTED | 不能把SQL已產出視為可建表驗證通過 |
+| SQL登入 | PASS（R2.5） | 互動式password prompt成功登入本機MySQL8.4.11；Round2無密碼1045為歷史紀錄 |
+| 建立隔離測試庫 | PASS（R2.5） | 重新確認不存在，使用者回覆「允許」後建立rehab_r2_validation |
+| V001／V002實際MySQL execution | PASS（R2.5） | 18表成功後完成Main驗證，再建研究11表；沒有DDL錯誤，Migration原檔未改 |
 | 靜態表數／順序／Engine／字元集 | PASS | V00118、V00211，總29；每表InnoDB/utf8mb4，父表先於FK子表 |
 | Entity欄位／型別／長度／可空性 | PASS | 238 Entity欄，DDL240欄；兩個computed為刻意新增；created_at的NN新決策見06 |
 | FK graph／型別／Collation／刪除語義 | PASS static | 33FK，3CASCADE；未亂補審計或多型FK |
 | 明名PK／UNIQUE／INDEX | PASS static | 共68（含29個PK；不含MySQL自動產生FK index）；Entity明名約束均對上 |
 | CHECK／DEFAULT | PASS static | 16CHECK；9個有SQLDEFAULT的欄；沒有把Java初始值套成SQLDEFAULT |
 | 已生成metadata manifest與DDL一致 | PASS | validate_static.py檢查validate_schema.sql逐字與產生結果一致 |
-| 靜態檢查器mutation tests | PASS | 13/13，沒有真正連DB |
-| Git／新增檔whitespace | PASS | git diff --check及8個新增檔逐一no-index --check均通過；tracked diff為空 |
-| generated UNIQUE／CASCADE／CHECK／日期／BLOB實際DML | NOT TESTED | 下方人工隔離驗收步驟 |
+| 靜態檢查器mutation tests | PASS | R2原13/13；R2.5補CHECK metadata escaping回歸後14/14，靜態工具本身不連DB |
+| Git／新增檔whitespace | PASS（R2歷史） | R2的git diff --check及8個新增檔逐一no-index --check均通過；R2.5有文件／驗證器增量修改，另見09 |
+| generated UNIQUE／CASCADE／CHECK／日期／BLOB實際DML | PASS（R2.5） | 23結果斷言＋28Expected Failure通過；16CHECK全部拒絕非法資料，最終29表皆0列 |
 | Spring/MySQL整合 | NOT RUN | 本輪禁止Java／JDBC改動；不跑Hibernate update |
 | Azure／Render／正式schema | NOT RUN | 無存取、無部署、無舊資料搬遷 |
 
-CLI連線失敗後停止憑證探索。沒有向使用者索取root密碼，沒有使用密碼參數值、讀取Workbench憑證或建立新登入。Workbench成功連線只代表使用者有存取能力，不能宣稱Codex已SQL驗證。
+Round2歷史：CLI連線失敗後停止憑證探索。沒有向使用者索取root密碼，沒有使用密碼參數值、讀取Workbench憑證或建立新登入。Workbench成功連線只代表使用者有存取能力，不能宣稱Codex已SQL驗證。
+
+Round2.5更新：使用MySQL CLI互動式密碼輸入完成唯讀預檢；版本8.4.11，原SHOW DATABASES僅四個系統schema，隔離庫不存在；sql_mode包含STRICT_TRANS_TABLES，innodb_page_size=16384。使用者回覆「允許」後再次確認不存在，才新建隔離庫。已完成V001／Main驗證／V002／Research驗證／DML／ROLLBACK後複驗，結果詳見09及保存的XML/JSON。未將密碼寫入命令列參數、檔案或報告，也未讀Workbench憑證。
+
+## R2.5實際Metadata／DML結果
+
+| 階段 | 表數 | 欄數 | Generated | FK | 明定鍵／索引 | 自動FK index | 實體index合計 | CHECK |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| V001 Main | 18 | 149 | 2 | 26 | 49 | 6 | 55 | 12 |
+| V001＋V002 | 29 | 240 | 2 | 33 | 68 | 7 | 75 | 16 |
+
+兩階段SHOW TABLES逐名比對原Entity／Round1清單，沒有重新命名；TABLE/COLUMN/INDEX/FK/CHECK drift、額外欄／表／FK／CHECK resultsets全部0列。所有CHECK為ENFORCED=YES。7個自動index均為非唯一FK supporting index，已獨立列出。
+
+首次Main metadata檢查3個CHECK誤判：MySQL8.4.11 CHECK_CLAUSE用反斜線引號delimiter，SHOW CREATE TABLE則顯示正常引號。已保存HEX／SHOW CREATE證據；僅validate_static.py及validate_schema.sql補delimiter正規化，另補unit test，不改V001/V002、約束內容或literal大小寫。修後Main／Research及DML後完整metadata複驗皆無drift。
+
+DML：23/23結果assertion、28/28預期拒絕（1062×7、1451×3、1452×2、3819×16）。全程僅新隔離庫虛構fixture，transaction最後ROLLBACK，29表逐表確認0列；沒有殘留帳號／policy／研究同意。AUTO_INCREMENT可能留下合理跳號，沒有reset。附加診斷@@in_transaction回傳1193（MySQL不支援該系統變數），沒有影響DML結果；最後改以新連線確認schema、autocommit=1、foreign_key_checks=1及逐表0列。1193非Migration／約束失敗，完整記錄見09。
+
+未驗證：兩連線競態、Spring Boot/Connector/J/Hibernate、100MiB影片streaming／Range下載、Android/Render E2E。max_allowed_packet實測64MiB，與現有100MiB video上限整合需R3處理。原SQL Server databaseName由DB_URL注入且本process未提供，仍UNVERIFIED；application.properties未改。
 
 ## 可重複靜態驗證
 
@@ -36,12 +53,12 @@ git diff --check
 
 本機實際使用的Python路徑是 `C:/Users/kuoja/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`，因一般PATH沒有python/py。
 
-實際輸出：
+R2.5重新執行的實際輸出：
 
 ```text
 PASS static: main=18 research=11 columns=240 Entity_fields=238 indexes=68 FK=33 CHECK=16
-NOT TESTED: real MySQL parsing, execution, constraints, integration
-Ran 13 tests ... OK
+Static tool does not execute MySQL; see 09_ROUND25_EXECUTION_REPORT.md for separate execution evidence.
+Ran 14 tests ... OK
 ```
 
 靜態工具會檢查建表順序、重複欄、PK、FK圖／刪除規則／父鍵型別、關鍵filtered替代、特殊非FK、revision普通索引、9SQL defaults、索引長度上限、T-SQL殘留；與全部Entity的field/type/length/null、明名UniqueConstraint/Index/column unique交叉檢查。
@@ -120,7 +137,7 @@ SOURCE C:/Users/kuoja/Documents/GitHub/trianing-system/docs/database-rebuild/mys
 
 Expression的非語義格式差異會做有限正規化；CHECK字串literal大小寫保留。若本機MySQL格式仍產生diff，先SHOW CREATE TABLE逐條比對，記錄格式／真正drift，不可只放寬斷言。腳本**回傳查詢結果而非自動exit code判定**；保存所有resultsets供review。
 
-## 人工約束／資料行為驗收（以下全部NOT TESTED）
+## 人工約束／資料行為驗收（原R2手動案例；R2.5執行狀態見上節／09）
 
 所有DML只在新隔離庫，用虛構fixture、transaction最後ROLLBACK。以下不是真帳號seed；不執行對現有庫的DELETE。每個預期錯誤statement單獨在Workbench執行，確認錯誤後其餘transaction仍有效；不要用整批遇錯繼續掩蓋失敗。
 
@@ -190,10 +207,10 @@ ROLLBACK;
 | audit actor／已刪樣本retention event無FK欄 | 可寫最小審計，不憑名稱加不存在的FK |
 | research_retention_policies | 空表；沒有虛構policy default/正式期限 |
 
-每組用ROLLBACK退出，不留下fixture。再跑validate_schema核對schema不變。跨兩connection驗證同user競爭active_reset：一方先INSERT未COMMIT，另一方同user INSERT應等待，第一方commit後第二方duplicate；最後只清本次fixture。此競態測試**待執行**。
+每組用ROLLBACK退出，不留下fixture。再跑validate_schema核對schema不變。跨兩connection驗證同user競爭active_reset：一方先INSERT未COMMIT，另一方同user INSERT應等待，第一方commit後第二方duplicate；最後只清本次fixture。此競態測試**待執行**；本輪沒有為此COMMIT fixture。
 
 ## Git／邊界確認
 
 新增檔案僅位於docs/database-rebuild；原有01～05、Java、Dart、SQL Server migration、pom/application、Dockerfile未修改。後端 `git diff --check`檢查tracked diff；因新檔未git add，另外逐一 `git diff --no-index --check -- /dev/null <新檔>`，確保未tracked新增檔亦查whitespace。沒有git add/commit/push/merge/PR；沒有部署或Production SQL。
 
-本輪的13個檢查器tests與static PASS不等於「Main已在MySQL成功建18表」或「App全功能整合通過」。真實execution與上述DML結果需補入此文件之後，才可標記PASS。
+R2的13個檢查器tests與static PASS不等於MySQL執行通過。R2.5已補入真實execution／metadata／DML結果，因此僅該範圍改PASS；App全功能整合仍NOT RUN。完整原始resultsets及SQL/JSON證據見09。

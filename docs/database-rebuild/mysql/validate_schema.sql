@@ -71,7 +71,7 @@ WITH expected AS (SELECT * FROM JSON_TABLE(@r2_checks, '$[*]' COLUMNS (t VARCHAR
 SELECT 'CHECK_DRIFT' AS audit, e.t, e.n, e.e AS expected_clause, a.CHECK_CLAUSE AS actual_clause, tc.ENFORCED
 FROM expected e LEFT JOIN information_schema.CHECK_CONSTRAINTS a ON a.CONSTRAINT_SCHEMA=DATABASE() AND a.CONSTRAINT_NAME=e.n
 LEFT JOIN information_schema.TABLE_CONSTRAINTS tc ON tc.CONSTRAINT_SCHEMA=DATABASE() AND tc.TABLE_NAME=e.t AND tc.CONSTRAINT_NAME=e.n
-WHERE a.CONSTRAINT_NAME IS NULL OR tc.ENFORCED<>'YES' OR REGEXP_REPLACE(REGEXP_REPLACE(REPLACE(COALESCE(a.CHECK_CLAUSE,''),'_utf8mb4',''),'[[:space:]]+IN[[:space:]]+',' in ',1,0,'i'),'[[:space:]`()]+','')<>REGEXP_REPLACE(REGEXP_REPLACE(REPLACE(COALESCE(e.e,''),'_utf8mb4',''),'[[:space:]]+IN[[:space:]]+',' in ',1,0,'i'),'[[:space:]`()]+','');
+WHERE a.CONSTRAINT_NAME IS NULL OR tc.ENFORCED<>'YES' OR REGEXP_REPLACE(REGEXP_REPLACE(REPLACE(REPLACE(COALESCE(a.CHECK_CLAUSE,''),CONCAT(CHAR(92),CHAR(39)),CHAR(39)),'_utf8mb4',''),'[[:space:]]+IN[[:space:]]+',' in ',1,0,'i'),'[[:space:]`()]+','')<>REGEXP_REPLACE(REGEXP_REPLACE(REPLACE(REPLACE(COALESCE(e.e,''),CONCAT(CHAR(92),CHAR(39)),CHAR(39)),'_utf8mb4',''),'[[:space:]]+IN[[:space:]]+',' in ',1,0,'i'),'[[:space:]`()]+','');
 
 WITH expected AS (SELECT * FROM JSON_TABLE(@r2_checks, '$[*]' COLUMNS (t VARCHAR(64) PATH '$.t', s INT PATH '$.s', n VARCHAR(64) PATH '$.n', e VARCHAR(512) PATH '$.e')) j WHERE s<=@r2_stage)
 SELECT 'EXTRA_CHECK' AS audit, a.TABLE_NAME, a.CONSTRAINT_NAME

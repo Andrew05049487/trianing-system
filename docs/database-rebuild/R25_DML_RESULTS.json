@@ -1,0 +1,324 @@
+{
+  "assertions": [
+    {
+      "id": "A01",
+      "result": "PASS"
+    },
+    {
+      "id": "A02",
+      "result": "PASS"
+    },
+    {
+      "id": "A03",
+      "result": "PASS"
+    },
+    {
+      "id": "A04",
+      "result": "PASS"
+    },
+    {
+      "id": "A05",
+      "result": "PASS"
+    },
+    {
+      "id": "A06",
+      "result": "PASS"
+    },
+    {
+      "id": "A07",
+      "result": "PASS"
+    },
+    {
+      "id": "A08",
+      "result": "PASS"
+    },
+    {
+      "id": "A09",
+      "result": "PASS"
+    },
+    {
+      "id": "A10",
+      "result": "PASS"
+    },
+    {
+      "id": "A11",
+      "result": "PASS"
+    },
+    {
+      "id": "A12",
+      "result": "PASS"
+    },
+    {
+      "id": "A13",
+      "result": "PASS"
+    },
+    {
+      "id": "A14",
+      "result": "PASS"
+    },
+    {
+      "id": "A15",
+      "result": "PASS"
+    },
+    {
+      "id": "A16",
+      "result": "PASS"
+    },
+    {
+      "id": "A17",
+      "result": "PASS"
+    },
+    {
+      "id": "A18",
+      "result": "PASS"
+    },
+    {
+      "id": "A19",
+      "result": "PASS"
+    },
+    {
+      "id": "A20",
+      "result": "PASS"
+    },
+    {
+      "id": "A21",
+      "result": "PASS"
+    },
+    {
+      "id": "A22",
+      "result": "PASS"
+    },
+    {
+      "id": "A23",
+      "result": "PASS"
+    }
+  ],
+  "expected_failures": [
+    {
+      "id": "E01",
+      "expected_code": 1062,
+      "actual_code": 1062,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Duplicate entry 'r25case1' for key 'users.uq_users_account_i"
+    },
+    {
+      "id": "E02",
+      "expected_code": 1062,
+      "actual_code": 1062,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Duplicate entry 'r25-subject-A' for key 'users.uq_users_goog"
+    },
+    {
+      "id": "E03",
+      "expected_code": 1062,
+      "actual_code": 1062,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Duplicate entry 'R25-A@example.invalid' for key 'users.uq_us"
+    },
+    {
+      "id": "E04",
+      "expected_code": 1062,
+      "actual_code": 1062,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Duplicate entry '4' for key 'password_reset_requests.uq_pass"
+    },
+    {
+      "id": "E05",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_exercise_result_complete' is violated."
+    },
+    {
+      "id": "E06",
+      "expected_code": 1452,
+      "actual_code": 1452,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Cannot add or update a child row: a foreign key constraint f"
+    },
+    {
+      "id": "E07",
+      "expected_code": 1451,
+      "actual_code": 1451,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Cannot delete or update a parent row: a foreign key constrai"
+    },
+    {
+      "id": "E08",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_chat_participant_order' is violated."
+    },
+    {
+      "id": "E09",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_chat_conversation_type' is violated."
+    },
+    {
+      "id": "E10",
+      "expected_code": 1451,
+      "actual_code": 1451,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Cannot delete or update a parent row: a foreign key constrai"
+    },
+    {
+      "id": "E11",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_rehab_plan_condition' is violated."
+    },
+    {
+      "id": "E12",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_rehab_plan_item_order' is violated."
+    },
+    {
+      "id": "E13",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_rehab_plan_item_sets' is violated."
+    },
+    {
+      "id": "E14",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_rehab_plan_item_reps' is violated."
+    },
+    {
+      "id": "E28",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_rehab_plan_item_done' is violated."
+    },
+    {
+      "id": "E15",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_custom_assignment_active' is violated."
+    },
+    {
+      "id": "E16",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_exercise_assignment_active' is violated"
+    },
+    {
+      "id": "E17",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_training_video_size' is violated."
+    },
+    {
+      "id": "E18",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_user_avatar_source' is violated."
+    },
+    {
+      "id": "E19",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_research_consent_active' is violated."
+    },
+    {
+      "id": "E20",
+      "expected_code": 1062,
+      "actual_code": 1062,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Duplicate entry 'r25-subject-1' for key 'research_consents.u"
+    },
+    {
+      "id": "E21",
+      "expected_code": 1062,
+      "actual_code": 1062,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Duplicate entry '1-r25-client-sample' for key 'research_samp"
+    },
+    {
+      "id": "E22",
+      "expected_code": 1452,
+      "actual_code": 1452,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Cannot add or update a child row: a foreign key constraint f"
+    },
+    {
+      "id": "E23",
+      "expected_code": 1451,
+      "actual_code": 1451,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Cannot delete or update a parent row: a foreign key constrai"
+    },
+    {
+      "id": "E24",
+      "expected_code": 1062,
+      "actual_code": 1062,
+      "sql_state": "23000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Duplicate entry '2-r25-study' for key 'research_grants.uq_re"
+    },
+    {
+      "id": "E25",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_research_grant_annotate' is violated."
+    },
+    {
+      "id": "E26",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_research_grant_review' is violated."
+    },
+    {
+      "id": "E27",
+      "expected_code": 3819,
+      "actual_code": 3819,
+      "sql_state": "HY000",
+      "result": "PASS (Expected Failure)",
+      "error_summary": "Check constraint 'ck_research_grant_manage' is violated."
+    }
+  ],
+  "assertion_count": 23,
+  "expected_failure_count": 28
+}

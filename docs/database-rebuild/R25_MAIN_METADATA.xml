@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mysql_results>
+<resultset statement="SHOW TABLES " xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="Tables_in_rehab_r2_validation">chat_conversations</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">chat_messages</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">custom_exercise_assignments</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">custom_rehab_exercises</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">exercise</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">exercise_assignments</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">exercise_result</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">friend_requests</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">friendships</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">password_reset_requests</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">rehab_plan_items</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">rehab_plans</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">training_history</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">training_history_video</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">training_session_results</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">user_avatars</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">user_bindings</field>
+  </row>
+
+  <row>
+	<field name="Tables_in_rehab_r2_validation">users</field>
+  </row>
+</resultset>
+<resultset statement="SELECT DATABASE() AS selected_schema, VERSION() AS server_version,
+       @@session.time_zone AS session_time_zone, @@sql_mode AS sql_mode,
+       @@max_allowed_packet AS max_allowed_packet" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="selected_schema">rehab_r2_validation</field>
+	<field name="server_version">8.4.11</field>
+	<field name="session_time_zone">+00:00</field>
+	<field name="sql_mode">ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION</field>
+	<field name="max_allowed_packet">67108864</field>
+  </row>
+</resultset>
+<resultset statement="WITH expected AS (SELECT * FROM JSON_TABLE(@r2_tables, '$[*]' COLUMNS (t VARCHAR(64) PATH '$.t', s INT PATH '$.s')) j WHERE s&lt;=@r2_stage)
+SELECT 'TABLE_DRIFT' AS audit, e.t, a.ENGINE, a.TABLE_COLLATION
+FROM expected e LEFT JOIN information_schema.TABLES a ON a.TABLE_SCHEMA=DATABASE() AND a.TABLE_NAME=e.t
+WHERE a.TABLE_NAME IS NULL OR a.ENGINE&lt;&gt;'InnoDB' OR a.TABLE_COLLATION&lt;&gt;'utf8mb4_0900_as_cs'
+UNION ALL SELECT 'EXTRA_TABLE', a.TABLE_NAME, a.ENGINE, a.TABLE_COLLATION
+FROM information_schema.TABLES a LEFT JOIN expected e ON e.t=a.TABLE_NAME
+WHERE a.TABLE_SCHEMA=DATABASE() AND e.t IS NULL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"></resultset>
+<resultset statement="WITH expected AS (SELECT * FROM JSON_TABLE(@r2_columns, '$[*]' COLUMNS (t VARCHAR(64) PATH '$.t', s INT PATH '$.s', n VARCHAR(64) PATH '$.n', typ VARCHAR(64) PATH '$.typ', nullable VARCHAR(3) PATH '$.nullable', d VARCHAR(100) PATH '$.d', auto INT PATH '$.auto', gen VARCHAR(300) PATH '$.gen', storage VARCHAR(10) PATH '$.storage', coll VARCHAR(64) PATH '$.coll')) j WHERE s&lt;=@r2_stage)
+SELECT 'COLUMN_DRIFT' AS audit, e.t, e.n, e.typ AS expected_type, a.COLUMN_TYPE AS actual_type,
+e.nullable AS expected_nullable, a.IS_NULLABLE AS actual_nullable, e.d AS expected_default, a.COLUMN_DEFAULT AS actual_default,
+a.EXTRA, a.GENERATION_EXPRESSION, a.COLLATION_NAME
+FROM expected e LEFT JOIN information_schema.COLUMNS a ON a.TABLE_SCHEMA=DATABASE() AND a.TABLE_NAME=e.t AND a.COLUMN_NAME=e.n
+WHERE a.COLUMN_NAME IS NULL OR a.COLUMN_TYPE&lt;&gt;e.typ OR a.IS_NULLABLE&lt;&gt;e.nullable
+OR NOT (LOWER(REGEXP_REPLACE(REPLACE(COALESCE(a.COLUMN_DEFAULT,''),'_utf8mb4',''),'[[:space:]`()]+','')) &lt;=&gt; LOWER(REGEXP_REPLACE(REPLACE(COALESCE(e.d,''),'_utf8mb4',''),'[[:space:]`()]+','')))
+OR (LOCATE('auto_increment',a.EXTRA)&gt;0)&lt;&gt;e.auto
+OR LOWER(REGEXP_REPLACE(REPLACE(COALESCE(a.GENERATION_EXPRESSION,''),'_utf8mb4',''),'[[:space:]`()]+',''))&lt;&gt;LOWER(REGEXP_REPLACE(REPLACE(COALESCE(e.gen,''),'_utf8mb4',''),'[[:space:]`()]+',''))
+OR (e.storage&lt;&gt;'' AND LOCATE(CONCAT(e.storage,' GENERATED'),UPPER(a.EXTRA))=0)
+OR (e.storage='' AND LOCATE('GENERATED',UPPER(a.EXTRA))&gt;0 AND LOCATE('DEFAULT_GENERATED',UPPER(a.EXTRA))=0)
+OR NOT (a.COLLATION_NAME &lt;=&gt; e.coll)" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"></resultset>
+<resultset statement="WITH expected AS (SELECT * FROM JSON_TABLE(@r2_columns, '$[*]' COLUMNS (t VARCHAR(64) PATH '$.t', s INT PATH '$.s', n VARCHAR(64) PATH '$.n', typ VARCHAR(64) PATH '$.typ', nullable VARCHAR(3) PATH '$.nullable', d VARCHAR(100) PATH '$.d', auto INT PATH '$.auto', gen VARCHAR(300) PATH '$.gen', storage VARCHAR(10) PATH '$.storage', coll VARCHAR(64) PATH '$.coll')) j WHERE s&lt;=@r2_stage)
+SELECT 'EXTRA_COLUMN' AS audit, a.TABLE_NAME, a.COLUMN_NAME
+FROM information_schema.COLUMNS a LEFT JOIN expected e ON a.TABLE_NAME=e.t AND a.COLUMN_NAME=e.n
+WHERE a.TABLE_SCHEMA=DATABASE() AND e.n IS NULL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"></resultset>
+<resultset statement="WITH expected AS (SELECT * FROM JSON_TABLE(@r2_indexes, '$[*]' COLUMNS (t VARCHAR(64) PATH '$.t', s INT PATH '$.s', n VARCHAR(64) PATH '$.n', uq INT PATH '$.unique', c VARCHAR(512) PATH '$.c')) j WHERE s&lt;=@r2_stage)
+, actual AS (
+SELECT TABLE_NAME t, INDEX_NAME n, MIN(NON_UNIQUE) non_unique,
+GROUP_CONCAT(CONCAT(COLUMN_NAME,IF(COLLATION='D',' DESC',' ASC')) ORDER BY SEQ_IN_INDEX SEPARATOR ',') c,
+SUM(SUB_PART IS NOT NULL) prefixes, MIN(IS_VISIBLE) visible, MIN(INDEX_TYPE) kind
+FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() GROUP BY TABLE_NAME,INDEX_NAME)
+SELECT 'INDEX_DRIFT' AS audit, e.t, e.n, e.c AS expected_columns, a.c AS actual_columns
+FROM expected e LEFT JOIN actual a ON a.t=e.t AND a.n=e.n
+WHERE a.n IS NULL OR a.non_unique&lt;&gt;1-e.uq OR a.c&lt;&gt;e.c OR a.prefixes&lt;&gt;0 OR a.visible&lt;&gt;'YES' OR a.kind&lt;&gt;'BTREE'" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"></resultset>
+<resultset statement="WITH expected AS (SELECT * FROM JSON_TABLE(@r2_fks, '$[*]' COLUMNS (t VARCHAR(64) PATH '$.t', s INT PATH '$.s', n VARCHAR(64) PATH '$.n', c VARCHAR(64) PATH '$.c', rt VARCHAR(64) PATH '$.rt', rc VARCHAR(64) PATH '$.rc', d VARCHAR(16) PATH '$.d', u VARCHAR(16) PATH '$.u')) j WHERE s&lt;=@r2_stage)
+SELECT 'FK_DRIFT' AS audit, e.t, e.n, e.c, e.rt, e.rc, r.DELETE_RULE, r.UPDATE_RULE
+FROM expected e LEFT JOIN information_schema.KEY_COLUMN_USAGE k
+ON k.CONSTRAINT_SCHEMA=DATABASE() AND k.TABLE_NAME=e.t AND k.CONSTRAINT_NAME=e.n
+LEFT JOIN information_schema.REFERENTIAL_CONSTRAINTS r ON r.CONSTRAINT_SCHEMA=DATABASE() AND r.CONSTRAINT_NAME=e.n AND r.TABLE_NAME=e.t
+WHERE k.CONSTRAINT_NAME IS NULL OR k.COLUMN_NAME&lt;&gt;e.c OR k.REFERENCED_TABLE_SCHEMA&lt;&gt;DATABASE()
+OR k.REFERENCED_TABLE_NAME&lt;&gt;e.rt OR k.REFERENCED_COLUMN_NAME&lt;&gt;e.rc
+OR REPLACE(r.DELETE_RULE,'NO ACTION','RESTRICT')&lt;&gt;e.d OR REPLACE(r.UPDATE_RULE,'NO ACTION','RESTRICT')&lt;&gt;e.u" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"></resultset>
+<resultset statement="WITH expected AS (SELECT * FROM JSON_TABLE(@r2_fks, '$[*]' COLUMNS (t VARCHAR(64) PATH '$.t', s INT PATH '$.s', n VARCHAR(64) PATH '$.n', c VARCHAR(64) PATH '$.c', rt VARCHAR(64) PATH '$.rt', rc VARCHAR(64) PATH '$.rc', d VARCHAR(16) PATH '$.d', u VARCHAR(16) PATH '$.u')) j WHERE s&lt;=@r2_stage)
+SELECT 'EXTRA_FK' AS audit, a.TABLE_NAME, a.CONSTRAINT_NAME
+FROM information_schema.REFERENTIAL_CONSTRAINTS a LEFT JOIN expected e ON a.TABLE_NAME=e.t AND a.CONSTRAINT_NAME=e.n
+WHERE a.CONSTRAINT_SCHEMA=DATABASE() AND e.n IS NULL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"></resultset>
+<resultset statement="WITH expected AS (SELECT * FROM JSON_TABLE(@r2_checks, '$[*]' COLUMNS (t VARCHAR(64) PATH '$.t', s INT PATH '$.s', n VARCHAR(64) PATH '$.n', e VARCHAR(512) PATH '$.e')) j WHERE s&lt;=@r2_stage)
+SELECT 'CHECK_DRIFT' AS audit, e.t, e.n, e.e AS expected_clause, a.CHECK_CLAUSE AS actual_clause, tc.ENFORCED
+FROM expected e LEFT JOIN information_schema.CHECK_CONSTRAINTS a ON a.CONSTRAINT_SCHEMA=DATABASE() AND a.CONSTRAINT_NAME=e.n
+LEFT JOIN information_schema.TABLE_CONSTRAINTS tc ON tc.CONSTRAINT_SCHEMA=DATABASE() AND tc.TABLE_NAME=e.t AND tc.CONSTRAINT_NAME=e.n
+WHERE a.CONSTRAINT_NAME IS NULL OR tc.ENFORCED&lt;&gt;'YES' OR REGEXP_REPLACE(REGEXP_REPLACE(REPLACE(REPLACE(COALESCE(a.CHECK_CLAUSE,''),CONCAT(CHAR(92),CHAR(39)),CHAR(39)),'_utf8mb4',''),'[[:space:]]+IN[[:space:]]+',' in ',1,0,'i'),'[[:space:]`()]+','')&lt;&gt;REGEXP_REPLACE(REGEXP_REPLACE(REPLACE(REPLACE(COALESCE(e.e,''),CONCAT(CHAR(92),CHAR(39)),CHAR(39)),'_utf8mb4',''),'[[:space:]]+IN[[:space:]]+',' in ',1,0,'i'),'[[:space:]`()]+','')" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"></resultset>
+<resultset statement="WITH expected AS (SELECT * FROM JSON_TABLE(@r2_checks, '$[*]' COLUMNS (t VARCHAR(64) PATH '$.t', s INT PATH '$.s', n VARCHAR(64) PATH '$.n', e VARCHAR(512) PATH '$.e')) j WHERE s&lt;=@r2_stage)
+SELECT 'EXTRA_CHECK' AS audit, a.TABLE_NAME, a.CONSTRAINT_NAME
+FROM information_schema.TABLE_CONSTRAINTS a LEFT JOIN expected e ON a.TABLE_NAME=e.t AND a.CONSTRAINT_NAME=e.n
+WHERE a.CONSTRAINT_SCHEMA=DATABASE() AND a.CONSTRAINT_TYPE='CHECK' AND e.n IS NULL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"></resultset>
+<resultset statement="WITH expected AS (SELECT * FROM JSON_TABLE(@r2_indexes, '$[*]' COLUMNS (t VARCHAR(64) PATH '$.t', s INT PATH '$.s', n VARCHAR(64) PATH '$.n', uq INT PATH '$.unique', c VARCHAR(512) PATH '$.c')) j WHERE s&lt;=@r2_stage)
+SELECT 'UNEXPECTED_INDEX_REVIEW' AS audit, a.TABLE_NAME, a.INDEX_NAME, a.NON_UNIQUE, a.COLUMN_NAME
+FROM information_schema.STATISTICS a LEFT JOIN expected e ON a.TABLE_NAME=e.t AND a.INDEX_NAME=e.n
+WHERE a.TABLE_SCHEMA=DATABASE() AND e.n IS NULL ORDER BY a.TABLE_NAME,a.INDEX_NAME,a.SEQ_IN_INDEX" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="audit">UNEXPECTED_INDEX_REVIEW</field>
+	<field name="TABLE_NAME">chat_messages</field>
+	<field name="INDEX_NAME">fk_chat_message_sender</field>
+	<field name="NON_UNIQUE">1</field>
+	<field name="COLUMN_NAME">sender_id</field>
+  </row>
+
+  <row>
+	<field name="audit">UNEXPECTED_INDEX_REVIEW</field>
+	<field name="TABLE_NAME">exercise_result</field>
+	<field name="INDEX_NAME">fk_exercise_result_exercise</field>
+	<field name="NON_UNIQUE">1</field>
+	<field name="COLUMN_NAME">exercise_id</field>
+  </row>
+
+  <row>
+	<field name="audit">UNEXPECTED_INDEX_REVIEW</field>
+	<field name="TABLE_NAME">exercise_result</field>
+	<field name="INDEX_NAME">fk_exercise_result_user</field>
+	<field name="NON_UNIQUE">1</field>
+	<field name="COLUMN_NAME">user_id</field>
+  </row>
+
+  <row>
+	<field name="audit">UNEXPECTED_INDEX_REVIEW</field>
+	<field name="TABLE_NAME">friend_requests</field>
+	<field name="INDEX_NAME">fk_friend_requests_receiver</field>
+	<field name="NON_UNIQUE">1</field>
+	<field name="COLUMN_NAME">receiver_id</field>
+  </row>
+
+  <row>
+	<field name="audit">UNEXPECTED_INDEX_REVIEW</field>
+	<field name="TABLE_NAME">friendships</field>
+	<field name="INDEX_NAME">fk_friendships_high</field>
+	<field name="NON_UNIQUE">1</field>
+	<field name="COLUMN_NAME">user_high_id</field>
+  </row>
+
+  <row>
+	<field name="audit">UNEXPECTED_INDEX_REVIEW</field>
+	<field name="TABLE_NAME">user_bindings</field>
+	<field name="INDEX_NAME">fk_user_bindings_linked</field>
+	<field name="NON_UNIQUE">1</field>
+	<field name="COLUMN_NAME">linked_user_id</field>
+  </row>
+</resultset>
+<resultset statement="SELECT COUNT(*) AS actual_base_tables, IF(@r2_stage=1,18,29) AS expected_base_tables
+FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE'" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="actual_base_tables">18</field>
+	<field name="expected_base_tables">18</field>
+  </row>
+</resultset>
+<resultset statement="SELECT 'MAIN_COUNTS' AS phase,(SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE()) AS columns_count,(SELECT COUNT(*) FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE()) AS fk_count,(SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA=DATABASE() AND CONSTRAINT_TYPE='CHECK') AS check_count,(SELECT COUNT(*) FROM (SELECT DISTINCT TABLE_NAME,INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE()) i) AS physical_index_count" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="phase">MAIN_COUNTS</field>
+	<field name="columns_count">149</field>
+	<field name="fk_count">26</field>
+	<field name="check_count">12</field>
+	<field name="physical_index_count">55</field>
+  </row>
+</resultset>
+</mysql_results>

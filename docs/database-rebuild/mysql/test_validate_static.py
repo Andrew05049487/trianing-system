@@ -28,6 +28,13 @@ class StaticAuditTests(unittest.TestCase):
     def test_validation_manifest_is_current(self):
         self.assertEqual((audit.HERE / "validate_schema.sql").read_text(encoding="utf-8"), audit.validation_sql(audit.parse()))
 
+    def test_check_metadata_delimiters_normalized_without_folding_literal_case(self):
+        sql = audit.validation_sql(audit.parse())
+        clause = sql[sql.index("WHERE a.CONSTRAINT_NAME IS NULL OR tc.ENFORCED"):]
+        clause = clause.split(";", 1)[0]
+        self.assertEqual(clause.count("CONCAT(CHAR(92),CHAR(39)),CHAR(39)"), 2)
+        self.assertNotIn("LOWER(", clause)
+
     def test_missing_table_fails(self):
         self.mutate("V001__main_schema.sql", "CREATE TABLE exercise (", "CREATE TABLE renamed_exercise (")
 

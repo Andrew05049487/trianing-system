@@ -205,7 +205,9 @@ SELECT DATABASE() AS selected_schema, VERSION() AS server_version,
         declarations.append(f"SET @r2_{name}='{payload}';\n")
     norm = lambda expr: f"LOWER(REGEXP_REPLACE(REPLACE(COALESCE({expr},''),'_utf8mb4',''),'[[:space:]`()]+',''))"
     # Preserve CHECK string literal case (case-sensitive role/source constraints).
-    check_norm = lambda expr: f"REGEXP_REPLACE(REGEXP_REPLACE(REPLACE(COALESCE({expr},''),'_utf8mb4',''),'[[:space:]]+IN[[:space:]]+',' in ',1,0,'i'),'[[:space:]`()]+','')"
+    # MySQL 8.4.11 CHECK_CLAUSE escapes literal delimiters as backslash+quote;
+    # SHOW CREATE TABLE does not. Normalize delimiters, not literal case/values.
+    check_norm = lambda expr: f"REGEXP_REPLACE(REGEXP_REPLACE(REPLACE(REPLACE(COALESCE({expr},''),CONCAT(CHAR(92),CHAR(39)),CHAR(39)),'_utf8mb4',''),'[[:space:]]+IN[[:space:]]+',' in ',1,0,'i'),'[[:space:]`()]+','')"
     cte = lambda name: f"WITH expected AS (SELECT * FROM JSON_TABLE(@r2_{name}, '$[*]' COLUMNS ({dict(specs)[name]})) j WHERE s<=@r2_stage)\n"
     queries = [cte("tables") + """SELECT 'TABLE_DRIFT' AS audit, e.t, a.ENGINE, a.TABLE_COLLATION
 FROM expected e LEFT JOIN information_schema.TABLES a ON a.TABLE_SCHEMA=DATABASE() AND a.TABLE_NAME=e.t
@@ -280,4 +282,4 @@ if __name__ == "__main__":
     else:
         assert (HERE / "validate_schema.sql").read_text(encoding="utf-8") == output, "Validation manifest out of date"
         print(f"PASS static: main=18 research=11 columns={len(manifests[1])} Entity_fields={entity_fields} indexes={len(manifests[2])} FK={len(manifests[3])} CHECK={len(manifests[4])}")
-        print("NOT TESTED: real MySQL parsing, execution, constraints, integration")
+        print("Static tool does not execute MySQL; see 09_ROUND25_EXECUTION_REPORT.md for separate execution evidence.")

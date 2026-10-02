@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mysql_results>
+<resultset statement="SELECT CONSTRAINT_NAME,CHECK_CLAUSE,HEX(CHECK_CLAUSE) AS clause_hex FROM information_schema.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA='rehab_r2_validation' AND CONSTRAINT_NAME IN ('ck_chat_conversation_type','ck_rehab_plan_condition','ck_user_avatar_source') " xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="CONSTRAINT_NAME">ck_chat_conversation_type</field>
+	<field name="CHECK_CLAUSE">(`conversation_type` in (_utf8mb4\'THERAPIST\',_utf8mb4\'PEER\'))</field>
+	<field name="clause_hex">2860636F6E766572736174696F6E5F747970656020696E20285F757466386D62345C275448455241504953545C272C5F757466386D62345C27504545525C272929</field>
+  </row>
+
+  <row>
+	<field name="CONSTRAINT_NAME">ck_rehab_plan_condition</field>
+	<field name="CHECK_CLAUSE">(`condition_type` in (_utf8mb4\'fracture\',_utf8mb4\'stroke\'))</field>
+	<field name="clause_hex">2860636F6E646974696F6E5F747970656020696E20285F757466386D62345C2766726163747572655C272C5F757466386D62345C277374726F6B655C272929</field>
+  </row>
+
+  <row>
+	<field name="CONSTRAINT_NAME">ck_user_avatar_source</field>
+	<field name="CHECK_CLAUSE">(`source_type` in (_utf8mb4\'CUSTOM\',_utf8mb4\'GOOGLE\'))</field>
+	<field name="clause_hex">2860736F757263655F747970656020696E20285F757466386D62345C27435553544F4D5C272C5F757466386D62345C27474F4F474C455C272929</field>
+  </row>
+</resultset>
+<resultset statement="SHOW CREATE TABLE rehab_r2_validation.chat_conversations " xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="Table">chat_conversations</field>
+	<field name="Create Table">CREATE TABLE `chat_conversations` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `participant_one_id` bigint NOT NULL,
+  `participant_two_id` bigint NOT NULL,
+  `conversation_type` varchar(20) COLLATE utf8mb4_0900_as_cs NOT NULL,
+  `created_at` datetime(6) NOT NULL,
+  `updated_at` datetime(6) NOT NULL,
+  `last_message_text` varchar(2000) COLLATE utf8mb4_0900_as_cs DEFAULT NULL,
+  `last_message_at` datetime(6) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_chat_conversation_participants_type` (`participant_one_id`,`participant_two_id`,`conversation_type`),
+  KEY `idx_chat_conversation_one` (`participant_one_id`),
+  KEY `idx_chat_conversation_two` (`participant_two_id`),
+  CONSTRAINT `fk_chat_conversation_one` FOREIGN KEY (`participant_one_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `fk_chat_conversation_two` FOREIGN KEY (`participant_two_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `ck_chat_conversation_type` CHECK ((`conversation_type` in (_utf8mb4'THERAPIST',_utf8mb4'PEER'))),
+  CONSTRAINT `ck_chat_participant_order` CHECK ((`participant_one_id` &lt; `participant_two_id`))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs</field>
+  </row>
+</resultset>
+<resultset statement="SHOW CREATE TABLE rehab_r2_validation.rehab_plans " xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="Table">rehab_plans</field>
+	<field name="Create Table">CREATE TABLE `rehab_plans` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `plan_id` varchar(100) COLLATE utf8mb4_0900_as_cs NOT NULL,
+  `patient_id` bigint NOT NULL,
+  `created_by` varchar(50) COLLATE utf8mb4_0900_as_cs NOT NULL,
+  `plan_date` date NOT NULL,
+  `condition_type` varchar(20) COLLATE utf8mb4_0900_as_cs NOT NULL,
+  `created_at` datetime(6) NOT NULL DEFAULT (utc_timestamp(6)),
+  `updated_at` datetime(6) NOT NULL DEFAULT (utc_timestamp(6)),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_rehab_plans_plan_id` (`plan_id`),
+  UNIQUE KEY `uq_rehab_plans_patient_date` (`patient_id`,`plan_date`),
+  KEY `idx_rehab_plans_patient_date` (`patient_id`,`plan_date`),
+  CONSTRAINT `fk_rehab_plan_patient` FOREIGN KEY (`patient_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `ck_rehab_plan_condition` CHECK ((`condition_type` in (_utf8mb4'fracture',_utf8mb4'stroke')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs</field>
+  </row>
+</resultset>
+<resultset statement="SHOW CREATE TABLE rehab_r2_validation.user_avatars" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="Table">user_avatars</field>
+	<field name="Create Table">CREATE TABLE `user_avatars` (
+  `user_id` bigint NOT NULL,
+  `mime_type` varchar(32) COLLATE utf8mb4_0900_as_cs NOT NULL,
+  `image_data` longblob NOT NULL,
+  `source_type` varchar(16) COLLATE utf8mb4_0900_as_cs NOT NULL,
+  `updated_at` datetime(6) NOT NULL DEFAULT (utc_timestamp(6)),
+  PRIMARY KEY (`user_id`),
+  CONSTRAINT `fk_user_avatar_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT `ck_user_avatar_source` CHECK ((`source_type` in (_utf8mb4'CUSTOM',_utf8mb4'GOOGLE')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_as_cs</field>
+  </row>
+</resultset>
+</mysql_results>
