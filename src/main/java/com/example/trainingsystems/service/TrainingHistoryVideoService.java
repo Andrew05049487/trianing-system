@@ -28,7 +28,7 @@ public class TrainingHistoryVideoService {
     /**
      * 每次從 DB 讀影片的最大 chunk。
      *
-     * 不要一次 SELECT 整個 VARBINARY(MAX)。
+     * 不要一次 SELECT 整個 LONGBLOB。
      * 1 MB 對 Render 小記憶體 instance 比較安全。
      */
     private static final int READ_CHUNK_BYTES = 1024 * 1024;
@@ -46,7 +46,7 @@ public class TrainingHistoryVideoService {
         UserBindingRepository bindingRepository,
         CustomExerciseIdentityService identityService,
         JdbcTemplate jdbcTemplate,
-        @Value("${training.history.video.max-bytes:104857600}")
+        @Value("${training.history.video.max-bytes:33554432}")
         long maxVideoBytes
     ) {
         this.historyRepository = historyRepository;
@@ -73,7 +73,7 @@ public class TrainingHistoryVideoService {
      *         ↓
      *     Hibernate
      *         ↓
-     *     SQL Server
+     *     MySQL
      *
      * 31.92 MB 的影片會在 JVM / Direct Memory 裡產生大型 buffer。
      *
@@ -82,7 +82,7 @@ public class TrainingHistoryVideoService {
      *         ↓
      *     PreparedStatement.setBinaryStream()
      *         ↓
-     *     SQL Server VARBINARY(MAX)
+     *     MySQL LONGBLOB
      *
      * 不在 Java 程式裡建立完整影片 byte[]。
      */
@@ -128,6 +128,13 @@ public class TrainingHistoryVideoService {
             throw tooLarge();
         }
 
+        // Streaming avoids a JVM-sized buffer, not MySQL's per-value packet limit.
+        // Reserve space for statement metadata; never accept an unsafe override.
+        Long packetLimit = jdbcTemplate.queryForObject("SELECT @@max_allowed_packet", Long.class);
+        if (packetLimit == null || fileSize > packetLimit - 1024L * 1024L) {
+            throw tooLarge();
+        }
+
         final String contentType =
             normalizeVideoType(
                 file.getContentType()
@@ -139,7 +146,7 @@ public class TrainingHistoryVideoService {
             );
 
         final LocalDateTime now =
-            LocalDateTime.now();
+            LocalDateTime.now(java.time.ZoneOffset.UTC);
 
         final boolean alreadyExists =
             videoExists(historyId);
@@ -189,7 +196,7 @@ public class TrainingHistoryVideoService {
                 PreparedStatement ps =
                     connection.prepareStatement(
                         """
-                        INSERT INTO dbo.training_history_video
+                        INSERT INTO training_history_video
                         (
                             history_id,
                             file_name,
@@ -256,7 +263,7 @@ public class TrainingHistoryVideoService {
                 PreparedStatement ps =
                     connection.prepareStatement(
                         """
-                        UPDATE dbo.training_history_video
+                        UPDATE training_history_video
                         SET
                             file_name = ?,
                             content_type = ?,
@@ -310,7 +317,7 @@ public class TrainingHistoryVideoService {
             jdbcTemplate.queryForObject(
                 """
                 SELECT COUNT(*)
-                FROM dbo.training_history_video
+                FROM training_history_video
                 WHERE history_id = ?
                 """,
                 Integer.class,
@@ -361,7 +368,7 @@ public class TrainingHistoryVideoService {
                     file_name,
                     content_type,
                     file_size
-                FROM dbo.training_history_video
+                FROM training_history_video
                 WHERE history_id = ?
                 """,
                 (rs, rowNum) ->
@@ -396,7 +403,7 @@ public class TrainingHistoryVideoService {
     /**
      * 只讀取需要的範圍，不讀整支影片。
      *
-     * SQL Server SUBSTRING 對 VARBINARY 使用 1-based offset。
+     * MySQL SUBSTRING 對 LONGBLOB 使用 1-based offset。
      */
     @Transactional(readOnly = true)
     public byte[] readRange(
@@ -421,7 +428,7 @@ public class TrainingHistoryVideoService {
             );
 
         /*
-         * SQL Server SUBSTRING 是 1-based。
+         * MySQL SUBSTRING 是 1-based。
          */
         long sqlOffset =
             start + 1L;
@@ -435,7 +442,7 @@ public class TrainingHistoryVideoService {
                         ?,
                         ?
                     )
-                FROM dbo.training_history_video
+                FROM training_history_video
                 WHERE history_id = ?
                 """,
                 byte[].class,

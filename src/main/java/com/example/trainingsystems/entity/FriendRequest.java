@@ -34,7 +34,7 @@ public class FriendRequest {
     private String status = "PENDING";
 
     @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
 
     @Column(name = "responded_at")
     private LocalDateTime respondedAt;

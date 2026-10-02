@@ -39,7 +39,7 @@ public class UserBinding {
     @PrePersist
     public void beforeSave() {
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
         }
     }
 }

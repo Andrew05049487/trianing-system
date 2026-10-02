@@ -69,7 +69,8 @@ class AccountServiceTest {
             friendRequests,
             friendships,
             avatars,
-            researchCleanup
+            researchCleanup,
+            mock(AccountDataCleanupService.class)
         );
         when(users.saveAndFlush(any(User.class))).thenAnswer(call -> call.getArgument(0));
         when(identity.issueToken(any(User.class))).thenReturn("signed-token");

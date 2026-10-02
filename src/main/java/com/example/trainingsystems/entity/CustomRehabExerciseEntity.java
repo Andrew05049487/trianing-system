@@ -9,7 +9,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Data;
-import org.hibernate.annotations.Nationalized;
 
 import java.time.Instant;
 
@@ -29,11 +28,9 @@ public class CustomRehabExerciseEntity {
     private String id;
 
     @Column(nullable = false, length = 200)
-    @Nationalized
     private String name;
 
     @Column(nullable = false, length = 2000)
-    @Nationalized
     private String description = "";
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -61,13 +58,16 @@ public class CustomRehabExerciseEntity {
     @Column(nullable = false)
     private Double duration;
 
-    @Column(name = "keyframes_json", nullable = false, columnDefinition = "nvarchar(max)")
+    @Column(name = "keyframes_json", nullable = false, columnDefinition = "LONGTEXT")
     private String keyframesJson;
 
     @Column(
         name = "evaluation_rules_json",
         nullable = false,
-        columnDefinition = "nvarchar(max)"
+        columnDefinition = "LONGTEXT"
     )
     private String evaluationRulesJson;
+
+    @Column(name = "pose_measurement_rules_json", columnDefinition = "LONGTEXT")
+    private String poseMeasurementRulesJson;
 }

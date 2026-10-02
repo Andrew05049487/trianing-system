@@ -128,7 +128,7 @@ public class UserAvatarService {
         target.setMimeType(validated.mimeType());
         target.setImageData(validated.imageData());
         target.setSourceType(sourceType);
-        target.setUpdatedAt(LocalDateTime.now());
+        target.setUpdatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         avatarRepository.save(target);
     }
 

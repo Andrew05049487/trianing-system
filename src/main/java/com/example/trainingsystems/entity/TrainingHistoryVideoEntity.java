@@ -24,14 +24,14 @@ public class TrainingHistoryVideoEntity {
 
     @Column(
         name = "file_name",
-        columnDefinition = "NVARCHAR(255)"
+        columnDefinition = "VARCHAR(255)"
     )
     private String fileName;
 
     @Column(
         name = "content_type",
         nullable = false,
-        columnDefinition = "NVARCHAR(100)"
+        columnDefinition = "VARCHAR(100)"
     )
     private String contentType;
 
@@ -51,7 +51,7 @@ public class TrainingHistoryVideoEntity {
     @Column(
         name = "video_data",
         nullable = false,
-        columnDefinition = "VARBINARY(MAX)"
+        columnDefinition = "LONGBLOB"
     )
     private byte[] videoData;
 

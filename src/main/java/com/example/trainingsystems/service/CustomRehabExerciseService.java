@@ -95,6 +95,10 @@ public class CustomRehabExerciseService {
         entity.setDuration(request.getDuration());
         entity.setKeyframesJson(writeJson(request.getKeyframes()));
         entity.setEvaluationRulesJson(writeJson(request.getEvaluationRules()));
+        // Missing field from a legacy client must not erase existing rules on edit.
+        if (request.getPoseMeasurementRules() != null) {
+            entity.setPoseMeasurementRulesJson(writeJson(request.getPoseMeasurementRules()));
+        }
 
         return toDto(exerciseRepository.save(entity));
     }
@@ -197,6 +201,7 @@ public class CustomRehabExerciseService {
         requireNonNegativeFinite(request.getRestSeconds(), "restSeconds");
         requireNonNegativeFinite(request.getDuration(), "duration");
         validateKeyframes(request.getKeyframes(), request.getDuration());
+        validatePoseRules(request.getPoseMeasurementRules());
         if (request.getEvaluationRules() == null
             || !request.getEvaluationRules().isArray()) {
             throw badRequest("evaluationRules 必須是陣列");
@@ -231,6 +236,27 @@ public class CustomRehabExerciseService {
 
         if (Double.compare(maximumTime, duration) != 0) {
             throw badRequest("duration 必須等於最後一個 keyframe.time");
+        }
+    }
+
+    private void validatePoseRules(JsonNode rules) {
+        if (rules == null) return; // Backward-compatible legacy request.
+        if (!rules.isArray() || rules.size() > 32) throw badRequest("poseMeasurementRules 必須是陣列，最多 32 條");
+        Set<String> supported = Set.of("LEFT_ELBOW_ANGLE", "RIGHT_ELBOW_ANGLE",
+            "LEFT_KNEE_ANGLE", "RIGHT_KNEE_ANGLE", "LEFT_SHOULDER_ABDUCTION",
+            "RIGHT_SHOULDER_ABDUCTION", "LEFT_SHOULDER_FLEXION", "RIGHT_SHOULDER_FLEXION");
+        for (JsonNode rule : rules) {
+            if (!rule.isObject() || !supported.contains(rule.path("measurement").asText()))
+                throw badRequest("不支援的姿勢量測類型");
+            double target = requireJsonFiniteNumber(rule.get("targetAngleDegrees"), "targetAngleDegrees");
+            double tolerance = requireJsonFiniteNumber(rule.get("toleranceDegrees"), "toleranceDegrees");
+            if (tolerance <= 0 || target - tolerance < 0 || target + tolerance > 180)
+                throw badRequest("姿勢角度範圍必須介於 0～180 度");
+            for (String field : List.of("feedbackTooLow", "feedbackTooHigh")) {
+                JsonNode text = rule.get(field);
+                if (text != null && !text.isNull() && (!text.isTextual() || text.asText().length() > 1000))
+                    throw badRequest("姿勢提示文字格式錯誤或過長");
+            }
         }
     }
 
@@ -286,6 +312,8 @@ public class CustomRehabExerciseService {
         dto.setDuration(entity.getDuration());
         dto.setKeyframes(readJson(entity.getKeyframesJson()));
         dto.setEvaluationRules(readJson(entity.getEvaluationRulesJson()));
+        dto.setPoseMeasurementRules(entity.getPoseMeasurementRulesJson() == null
+            ? objectMapper.createArrayNode() : readJson(entity.getPoseMeasurementRulesJson()));
         return dto;
     }
 

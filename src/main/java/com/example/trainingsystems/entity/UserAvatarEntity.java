@@ -24,11 +24,12 @@ public class UserAvatarEntity {
     @Column(
         name = "image_data",
         nullable = false,
-        columnDefinition = "VARBINARY(MAX)"
+        columnDefinition = "LONGBLOB"
     )
     private byte[] imageData;
 
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
     @Column(name = "source_type", nullable = false, length = 16)
     private UserAvatarSourceType sourceType;
 
@@ -38,7 +39,7 @@ public class UserAvatarEntity {
     @PrePersist
     @PreUpdate
     public void updateTimestamp() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now(java.time.ZoneOffset.UTC);
     }
 
     public Long getUserId() {

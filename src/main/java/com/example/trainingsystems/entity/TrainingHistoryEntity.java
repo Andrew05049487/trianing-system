@@ -41,18 +41,18 @@ public class TrainingHistoryEntity {
 
     /**
      * 同一次訓練的群組識別。
-     * DB 欄位已由 SQL 新增為 NVARCHAR(100) NULL。
+     * DB 欄位已由 SQL 新增為 VARCHAR(100) NULL。
      */
     @Column(
         name = "session_id",
-        columnDefinition = "NVARCHAR(100)"
+        columnDefinition = "VARCHAR(100)"
     )
     private String sessionId;
 
     @Column(
         name = "action_name",
         nullable = false,
-        columnDefinition = "NVARCHAR(100)"
+        columnDefinition = "VARCHAR(100)"
     )
     private String actionName;
 
@@ -75,14 +75,14 @@ public class TrainingHistoryEntity {
     /** mistakeLogs 原始明細，以 JSON 陣列字串保存，不遺失細節。 */
     @Column(
         name = "mistake_logs",
-        columnDefinition = "NVARCHAR(MAX)"
+        columnDefinition = "LONGTEXT"
     )
     private String mistakeLogs;
 
     @Column(name = "body_score", precision = 5, scale = 2)
     private BigDecimal averageBodyScore;
 
-    @Column(name = "body_rep_scores", columnDefinition = "NVARCHAR(MAX)")
+    @Column(name = "body_rep_scores", columnDefinition = "LONGTEXT")
     private String bodyRepScores;
 
     @Column(name = "template_score", precision = 5, scale = 2)
@@ -91,18 +91,18 @@ public class TrainingHistoryEntity {
     @Column(name = "template_id", length = 160)
     private String templateId;
 
-    @Column(name = "template_name", columnDefinition = "NVARCHAR(200)")
+    @Column(name = "template_name", columnDefinition = "VARCHAR(200)")
     private String templateName;
 
     @Column(name = "template_valid_rep_count", nullable = false)
     private Integer templateValidRepCount = 0;
 
-    @Column(name = "template_rep_scores", columnDefinition = "NVARCHAR(MAX)")
+    @Column(name = "template_rep_scores", columnDefinition = "LONGTEXT")
     private String templateRepScores;
 
     @Column(
         name = "template_difference_summary",
-        columnDefinition = "NVARCHAR(MAX)"
+        columnDefinition = "LONGTEXT"
     )
     private String templateDifferenceSummary;
 

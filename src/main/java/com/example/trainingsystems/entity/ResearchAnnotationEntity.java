@@ -22,7 +22,7 @@ public class ResearchAnnotationEntity {
     @Column(name = "label", nullable = false, length = 32)
     private String label;
 
-    @Column(name = "note", columnDefinition = "nvarchar(1000)")
+    @Column(name = "note", columnDefinition = "VARCHAR(1000)")
     private String note;
 
     @Column(name = "label_version", nullable = false, length = 64)
@@ -49,6 +49,6 @@ public class ResearchAnnotationEntity {
     @Column(name = "reviewed_at")
     private Instant reviewedAt;
 
-    @Column(name = "review_note", columnDefinition = "nvarchar(1000)")
+    @Column(name = "review_note", columnDefinition = "VARCHAR(1000)")
     private String reviewNote;
 }

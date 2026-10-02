@@ -41,6 +41,7 @@ public class AccountService {
     private final FriendshipRepository friendshipRepository;
     private final UserAvatarRepository avatarRepository;
     private final ResearchAccountCleanupService researchCleanup;
+    private final AccountDataCleanupService dataCleanup;
 
     public AccountService(
         UserRepository userRepository,
@@ -55,7 +56,8 @@ public class AccountService {
         FriendRequestRepository friendRequestRepository,
         FriendshipRepository friendshipRepository,
         UserAvatarRepository avatarRepository,
-        ResearchAccountCleanupService researchCleanup
+        ResearchAccountCleanupService researchCleanup,
+        AccountDataCleanupService dataCleanup
     ) {
         this.userRepository = userRepository;
         this.identityService = identityService;
@@ -70,6 +72,7 @@ public class AccountService {
         this.friendshipRepository = friendshipRepository;
         this.avatarRepository = avatarRepository;
         this.researchCleanup = researchCleanup;
+        this.dataCleanup = dataCleanup;
     }
 
     @Transactional(readOnly = true)
@@ -199,6 +202,7 @@ public class AccountService {
         friendRequestRepository.deleteAll(friendRequestRepository.findBySenderIdOrReceiverId(id, id));
         friendshipRepository.deleteAll(friendshipRepository.findByUserLowIdOrUserHighId(id, id));
         researchCleanup.deleteForAccount(id);
+        dataCleanup.deleteForAccount(id);
         avatarRepository.deleteById(id);
         avatarRepository.flush();
         userRepository.delete(user);

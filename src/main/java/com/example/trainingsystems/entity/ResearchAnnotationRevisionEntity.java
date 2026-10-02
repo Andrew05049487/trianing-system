@@ -34,7 +34,7 @@ public class ResearchAnnotationRevisionEntity {
     @Column(name = "label", nullable = false, length = 32)
     private String label;
 
-    @Column(name = "note", columnDefinition = "nvarchar(1000)")
+    @Column(name = "note", columnDefinition = "VARCHAR(1000)")
     private String note;
 
     @Column(name = "label_version", nullable = false, length = 64)
@@ -49,7 +49,7 @@ public class ResearchAnnotationRevisionEntity {
     @Column(name = "reviewer_user_id")
     private Long reviewerUserId;
 
-    @Column(name = "review_note", columnDefinition = "nvarchar(1000)")
+    @Column(name = "review_note", columnDefinition = "VARCHAR(1000)")
     private String reviewNote;
 
     @Column(name = "created_at", nullable = false)

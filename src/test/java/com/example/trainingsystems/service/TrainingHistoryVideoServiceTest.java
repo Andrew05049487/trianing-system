@@ -56,6 +56,8 @@ class TrainingHistoryVideoServiceTest {
 
         jdbcTemplate =
             mock(JdbcTemplate.class);
+        when(jdbcTemplate.queryForObject("SELECT @@max_allowed_packet", Long.class))
+            .thenReturn(64L * 1024L * 1024L);
 
 
         service =

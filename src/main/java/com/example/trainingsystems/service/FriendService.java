@@ -109,14 +109,14 @@ public class FriendService {
             }
 
             friendRequest.setStatus(PENDING);
-            friendRequest.setCreatedAt(LocalDateTime.now());
+            friendRequest.setCreatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
             friendRequest.setRespondedAt(null);
         } else {
             friendRequest = new FriendRequest();
             friendRequest.setSender(sender);
             friendRequest.setReceiver(receiver);
             friendRequest.setStatus(PENDING);
-            friendRequest.setCreatedAt(LocalDateTime.now());
+            friendRequest.setCreatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         }
 
         FriendRequest savedRequest =
@@ -232,7 +232,7 @@ public class FriendService {
                 friendship.setUserLow(lowUser);
                 friendship.setUserHigh(highUser);
                 friendship.setCreatedAt(
-                    LocalDateTime.now()
+                    LocalDateTime.now(java.time.ZoneOffset.UTC)
                 );
 
                 friendshipRepository.save(friendship);
@@ -248,7 +248,7 @@ public class FriendService {
         }
 
         friendRequest.setRespondedAt(
-            LocalDateTime.now()
+            LocalDateTime.now(java.time.ZoneOffset.UTC)
         );
 
         friendRequestRepository.save(friendRequest);

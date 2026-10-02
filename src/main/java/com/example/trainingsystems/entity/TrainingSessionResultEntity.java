@@ -48,7 +48,7 @@ public class TrainingSessionResultEntity {
         name = "exercise_id",
         nullable = false,
         length = 128,
-        columnDefinition = "nvarchar(128)"
+        columnDefinition = "VARCHAR(128)"
     )
     private String exerciseId;
 
@@ -56,7 +56,7 @@ public class TrainingSessionResultEntity {
         name = "exercise_name",
         nullable = false,
         length = 255,
-        columnDefinition = "nvarchar(255)"
+        columnDefinition = "VARCHAR(255)"
     )
     private String exerciseName;
 

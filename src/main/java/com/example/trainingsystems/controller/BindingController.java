@@ -42,6 +42,12 @@ public class BindingController {
         String relationship =
                 request.getRelationship().trim().toUpperCase(Locale.ROOT);
 
+        // Therapist relationships must use the existing HMAC-authenticated API.
+        if (relationship.equals("THERAPIST")) {
+            return ResponseEntity.status(403)
+                    .body(Map.of("message", "請使用已驗證的治療師綁定流程"));
+        }
+
         if (!relationship.equals("THERAPIST")
                 && !relationship.equals("FAMILY")) {
             return ResponseEntity.badRequest()

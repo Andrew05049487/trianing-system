@@ -19,6 +19,7 @@ public class User {
     private String email;
 
     @Column
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String password;
 
     private String name;
@@ -54,5 +55,6 @@ public class User {
         name = "google_subject",
         length = 255
     )
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private String googleSubject;
 }

@@ -46,6 +46,7 @@ public class ChatConversationEntity {
     private User participantTwo;
 
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
     @Column(name = "conversation_type", nullable = false, length = 20)
     private ChatConversationType conversationType;
 

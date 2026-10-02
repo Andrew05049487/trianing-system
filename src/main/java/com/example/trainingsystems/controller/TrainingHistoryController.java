@@ -236,7 +236,7 @@ public class TrainingHistoryController {
 
         if (isNew) {
             entity.setCreatedAt(
-                LocalDateTime.now()
+                LocalDateTime.now(java.time.ZoneOffset.UTC)
             );
         }
 

@@ -42,7 +42,7 @@ public class ResearchSampleEntity {
     @Column(name = "camera_view", nullable = false, length = 8)
     private String cameraView;
 
-    @Column(name = "payload_json", nullable = false, columnDefinition = "nvarchar(max)")
+    @Column(name = "payload_json", nullable = false, columnDefinition = "LONGTEXT")
     private String payloadJson;
 
     @Column(name = "client_payload_hash", nullable = false, length = 64)
