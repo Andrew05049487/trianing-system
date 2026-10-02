@@ -13,6 +13,7 @@
 - 開始時 backend：feat/rehab-ml-cloud-label，HEAD `7be57b5284731db4f7de45d7325d2053714f7df2`；原始工作樹乾淨。
 - 原 main `94132993`，ML ahead 11 / behind 0；祖先檢查通過，已使用 `git switch main`、`git merge --ff-only feat/rehab-ml-cloud-label` 正常整合。
 - 後續修改在 main；沒有新分支、Force Push、丟棄 commit 或破壞性清理。
+- 已驗證實作 Commit：`fa28708996090b54ff74872bc8101a4e448d07a5`（34 個本輪檔案）；本文件後續紀錄以獨立文件 Commit 保存。下一輪應沿用目前 main HEAD，不退回舊交接版本。
 - Flutter 僅核對契約：feat/rehab-ml-poc `429f200cefe085cbb72c8d612146cd296ec16045`，ahead master 10 / behind 0。既有 `android/build/reports/problems/problems-report.html` 未修改／還原。
 - refs 為本機實測；沒有 fetch／push，不能宣稱遠端 refs 的即時狀態。
 - R1～R2.5 文件 01～09、V001、V002、validate_schema.sql、validate_static.py 均無 Git diff。
@@ -167,6 +168,7 @@ Google token verifier 与 email delivery 为测试 mock，实际外部 Google OA
 - 精確 COUNT(*) 核對所有 29 表：exercise=11；其餘 28 表全部 0。沒有虛構研究政策、權限、同意、樣本、標註或帳號殘留。
 - JAR：`target/trainingsystem-0.0.1-SNAPSHOT.jar`，55,581,800 bytes（本次 package）；包含 Connector/J，沒有 H2／mssql。
 - 本機 HTTP app 已停止，未留下背景服務。
+- 實作 Commit 後 backend 工作樹乾淨；DPAPI credential、target logs／JAR 仍為 ignored，本輪不 Push。部分原始碼原本採 CRLF／混合換行，保留其格式以避免整檔 diff；staged whitespace 額外以 cr-at-eol 檢查合法 CRLF，沒有隱藏真正的尾端空格。
 - 未提交 target log／JAR／credential／sample export；報告只保存非敏感結果。
 
 ## 11. Round 4 Flutter 契約交接
