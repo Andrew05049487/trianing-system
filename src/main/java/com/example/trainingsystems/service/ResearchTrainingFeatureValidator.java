@@ -2,15 +2,40 @@ package com.example.trainingsystems.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /** Mirrors ml/feature_schema.py for export eligibility; not a model or clinical score. */
 @Component
 public class ResearchTrainingFeatureValidator {
+    private final ResearchActionRegistry actions;
+    @Autowired
+    public ResearchTrainingFeatureValidator() { this(ResearchActionRegistry.PRODUCTION); }
+    public ResearchTrainingFeatureValidator(ResearchActionRegistry actions) { this.actions = actions; }
     public boolean matches(JsonNode sample) {
         try {
-            JsonNode frames = sample.path("frames");
+            var definition = actions.forSample(sample);
+            if (definition == null) return false;
+            JsonNode names = sample.path("featureNames");
             JsonNode features = sample.path("features");
-            if (!frames.isArray() || frames.size() < 4 || !features.isArray() || features.size() != 5) return false;
+            if (!names.isArray() || names.size() != definition.featureNames().size() ||
+                !features.isArray() || features.size() != names.size()) return false;
+            for (int i = 0; i < names.size(); i++) {
+                if (!definition.featureNames().get(i).equals(names.get(i).asText())) return false;
+            }
+            double[] expected = definition.extractor().apply(sample);
+            if (expected.length != features.size()) return false;
+            for (int i = 0; i < expected.length; i++) {
+                if (!Double.isFinite(expected[i]) || !features.get(i).isNumber() ||
+                    !Double.isFinite(features.get(i).asDouble()) ||
+                    Math.abs(features.get(i).asDouble() - expected[i]) > 1e-5) return false;
+            }
+            return true;
+        } catch (RuntimeException error) { return false; }
+    }
+
+    static double[] standingFeatures(JsonNode sample) {
+            JsonNode frames = sample.path("frames");
+            if (!frames.isArray() || frames.size() < 4) throw new IllegalArgumentException();
             int[] side = "left".equals(sample.path("movementSide").asText())
                 ? new int[]{5, 11, 13, 15} : new int[]{6, 12, 14, 16};
             double height = Double.NEGATIVE_INFINITY;
@@ -31,24 +56,16 @@ public class ResearchTrainingFeatureValidator {
             }
             double duration = (frames.get(frames.size() - 1).path("timestampMs").asDouble() -
                 frames.get(0).path("timestampMs").asDouble()) / 1000;
-            double[] expected = {height, hip, knee, lean, duration};
-            for (int i = 0; i < expected.length; i++) {
-                if (!Double.isFinite(expected[i]) ||
-                    Math.abs(features.get(i).asDouble() - expected[i]) > 1e-5) return false;
-            }
-            return true;
-        } catch (RuntimeException error) {
-            return false;
-        }
+            return new double[]{height, hip, knee, lean, duration};
     }
 
-    private double value(JsonNode points, int index, int axis) {
+    private static double value(JsonNode points, int index, int axis) {
         double result = points.get(index).get(axis).asDouble();
         if (!Double.isFinite(result)) throw new IllegalArgumentException();
         return result;
     }
 
-    private double angle(JsonNode points, int a, int center, int b) {
+    private static double angle(JsonNode points, int a, int center, int b) {
         double ux = value(points, a, 0) - value(points, center, 0);
         double uy = value(points, a, 1) - value(points, center, 1);
         double vx = value(points, b, 0) - value(points, center, 0);

@@ -121,6 +121,57 @@ class ResearchDataServiceTest {
         return root;
     }
 
+    @Test void legacyCanonicalPayloadAndActionContractsStaySeparate() {
+        ObjectNode legacy = validPayload();
+        var safe = validator.validate(legacy).safePayload();
+        assertThat(safe.has("actionDefinitionVersion")).isFalse();
+        assertThat(safe.path("frames").get(0).path("angles").toString())
+            .isEqualTo("{\"hipDeg\":100.0,\"kneeDeg\":90.0,\"trunkLeanDeg\":2.0}");
+        legacy.put("actionDefinitionVersion", "wrong-action-v1");
+        assertThatThrownBy(() -> validator.validate(legacy)).isInstanceOf(ResponseStatusException.class);
+        ObjectNode synthetic = validPayload();
+        synthetic.put("actionId", "synthetic_test_only");
+        synthetic.put("actionDefinitionVersion", "synthetic-v1");
+        synthetic.putArray("featureNames").add("duration_seconds");
+        synthetic.putArray("features").add(0.3);
+        assertThatThrownBy(() -> validator.validate(synthetic)).isInstanceOf(ResponseStatusException.class);
+        var testValidator = new ResearchSampleValidator(mapper, SyntheticResearchContract.REGISTRY);
+        assertThat(new ResearchTrainingFeatureValidator(SyntheticResearchContract.REGISTRY)
+            .matches(testValidator.validate(synthetic).safePayload())).isTrue();
+        synthetic.putArray("featureNames").add("peak_leg_height");
+        assertThatThrownBy(() -> testValidator.validate(synthetic)).isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test void injectedSyntheticActionUsesExistingUploadAndLabelPipeline() throws Exception {
+        validator = new ResearchSampleValidator(mapper, SyntheticResearchContract.REGISTRY);
+        service = new ResearchDataService(users, bindings, identity, consents, samples,
+            annotations, revisions, audits, validator, authority, retention, mapper, true, "study-v1");
+        authenticate(1L, "PATIENT");
+        when(consents.findById(1L)).thenReturn(Optional.of(activeConsent()));
+        ObjectNode payload = validPayload();
+        payload.put("actionId", "synthetic_test_only");
+        payload.put("actionDefinitionVersion", "synthetic-v1");
+        payload.putArray("featureNames").add("duration_seconds");
+        payload.putArray("features").add(0.3);
+        when(samples.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        var uploaded = service.upload(1L, "token", payload);
+        assertThat(uploaded.actionId()).isEqualTo("synthetic_test_only");
+        var capture = org.mockito.ArgumentCaptor.forClass(ResearchSampleEntity.class);
+        verify(samples).saveAndFlush(capture.capture());
+        var saved = capture.getValue();
+        when(samples.findByParticipantUserIdAndClientSampleId(1L, "rep_test_001"))
+            .thenReturn(Optional.of(saved));
+        assertThat(service.upload(1L, "token", payload).id()).isEqualTo(uploaded.id());
+        authenticate(7L, "THERAPIST");
+        when(samples.findById(saved.getId())).thenReturn(Optional.of(saved));
+        when(bindings.existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(1L, 7L, "THERAPIST"))
+            .thenReturn(true);
+        var label = service.label(7L, "token", saved.getId(), "test_match", "fixture", "test-v1", "synthetic-v1");
+        assertThat(label.actionDefinitionVersion()).isEqualTo("synthetic-v1");
+        assertThatThrownBy(() -> service.label(7L, "token", saved.getId(), "meets_requirement", "", "v1", "synthetic-v1"))
+            .isInstanceOf(ResponseStatusException.class);
+    }
+
     @Test void patientConsentCreatesServerPseudonym() {
         authenticate(1L, "PATIENT");
         when(consents.findById(1L)).thenReturn(Optional.empty());
@@ -300,20 +351,24 @@ class ResearchDataServiceTest {
         ResearchSampleEntity sample = new ResearchSampleEntity();
         sample.setId("sample-1");
         sample.setParticipantUserId(1L);
+        sample.setPayloadJson(validPayload().toString());
         when(samples.findById("sample-1")).thenReturn(Optional.of(sample));
         when(consents.findById(1L)).thenReturn(Optional.of(activeConsent()));
         when(bindings.existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(1L, 7L, "THERAPIST"))
             .thenReturn(true);
         when(annotations.findForUpdate("sample-1")).thenReturn(Optional.empty());
         var result = service.label(7L, "token", "sample-1",
-            "unassessable", "2D skeleton insufficient", "v1", "v1");
+            "unassessable", "2D skeleton insufficient", "v1", "standing-knee-raise-v1");
         assertThat(result.label()).isEqualTo("unassessable");
         verify(annotations).save(any());
+        assertThatThrownBy(() -> service.label(7L, "token", "sample-1",
+            "meets_requirement", "", "v1", "another-action-v1"))
+            .isInstanceOf(ResponseStatusException.class);
         ResearchAnnotationEntity other = new ResearchAnnotationEntity();
         other.setTherapistUserId(8L);
         when(annotations.findForUpdate("sample-1")).thenReturn(Optional.of(other));
         assertThatThrownBy(() -> service.label(7L, "token", "sample-1",
-            "meets_requirement", "", "v1", "v1"))
+            "meets_requirement", "", "v1", "standing-knee-raise-v1"))
             .isInstanceOf(ResponseStatusException.class);
     }
 

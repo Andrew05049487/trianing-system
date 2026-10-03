@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -17,17 +18,21 @@ import java.util.Set;
 @Component
 public class ResearchSampleValidator {
     public static final int MAX_JSON_BYTES = 300_000;
-    private static final List<String> FEATURES = List.of(
-        "peak_leg_height", "minimum_hip_angle_deg", "minimum_knee_angle_deg",
-        "peak_abs_trunk_lean_deg", "duration_seconds"
-    );
     private static final Set<String> ROOT_FIELDS = Set.of(
-        "schemaVersion", "actionId", "sampleId", "subjectId", "movementSide",
+        "schemaVersion", "actionId", "actionDefinitionVersion", "sampleId", "subjectId", "movementSide",
         "cameraView", "capturedAt", "segment", "featureNames", "features", "frames"
     );
     private final ObjectMapper mapper;
+    private final ResearchActionRegistry actions;
 
-    public ResearchSampleValidator(ObjectMapper mapper) { this.mapper = mapper; }
+    @Autowired
+    public ResearchSampleValidator(ObjectMapper mapper) { this(mapper, ResearchActionRegistry.PRODUCTION); }
+    public ResearchSampleValidator(ObjectMapper mapper, ResearchActionRegistry actions) {
+        this.mapper = mapper;
+        this.actions = actions;
+    }
+    public ResearchActionRegistry.Definition definition(JsonNode sample) { return actions.forSample(sample); }
+    public ResearchActionRegistry.Definition action(String id) { return actions.byId(id); }
 
     public ValidatedSample validate(JsonNode input) {
         return validate(input, true);
@@ -46,8 +51,8 @@ public class ResearchSampleValidator {
         input.fieldNames().forEachRemaining(name -> {
             if (!ROOT_FIELDS.contains(name)) throw invalid();
         });
-        if (input.path("schemaVersion").asInt(-1) != 1 ||
-            !"standing_knee_raise".equals(input.path("actionId").asText()) ||
+        var definition = actions.forSample(input);
+        if (definition == null ||
             !input.path("sampleId").asText("").matches("[A-Za-z0-9_-]{1,100}") ||
             !Set.of("left", "right").contains(input.path("movementSide").asText()) ||
             !Set.of("front", "rear").contains(input.path("cameraView").asText())) {
@@ -61,6 +66,7 @@ public class ResearchSampleValidator {
 
         JsonNode names = input.path("featureNames");
         JsonNode features = input.path("features");
+        List<String> FEATURES = definition.featureNames();
         if (!names.isArray() || names.size() != FEATURES.size() ||
             !features.isArray() || features.size() != FEATURES.size()) throw invalid();
         for (int i = 0; i < FEATURES.size(); i++) {
@@ -71,9 +77,8 @@ public class ResearchSampleValidator {
         if (!frames.isArray() || frames.size() < 4 || frames.size() > 80) throw invalid();
         ArrayNode safeFrames = mapper.createArrayNode();
         long first = -1, previous = -1;
-        int[] required = input.path("movementSide").asText().equals("left")
-            ? new int[]{5, 6, 11, 12, 13, 15}
-            : new int[]{5, 6, 11, 12, 14, 16};
+        Set<Integer> required = input.path("movementSide").asText().equals("left")
+            ? definition.leftRequired() : definition.rightRequired();
         for (JsonNode frame : frames) {
             JsonNode points = frame.path("landmarks");
             JsonNode scores = frame.path("confidence");
@@ -102,13 +107,13 @@ public class ResearchSampleValidator {
             for (int index : required) {
                 if (scores.get(index).asDouble() < 0.3) throw invalid();
             }
-            if (!finite(angles.path("hipDeg"), 0, 180) ||
-                !finite(angles.path("kneeDeg"), 0, 180) ||
-                !finite(angles.path("trunkLeanDeg"), -180, 180)) throw invalid();
             ObjectNode safeAngles = mapper.createObjectNode();
-            safeAngles.put("hipDeg", angles.path("hipDeg").asDouble());
-            safeAngles.put("kneeDeg", angles.path("kneeDeg").asDouble());
-            safeAngles.put("trunkLeanDeg", angles.path("trunkLeanDeg").asDouble());
+            // Stable ordering preserves legacy v1 canonical hashes on retry.
+            for (String key : definition.angles().keySet().stream().sorted().toList()) {
+                var range = definition.angles().get(key);
+                if (!finite(angles.path(key), range.min(), range.max())) throw invalid();
+                safeAngles.put(key, angles.path(key).asDouble());
+            }
             ObjectNode safeFrame = mapper.createObjectNode();
             safeFrame.put("timestampMs", timestamp);
             safeFrame.set("landmarks", safePoints);
@@ -119,12 +124,14 @@ public class ResearchSampleValidator {
         if (previous - first < 300 || previous - first > 8000 ||
             input.path("segment").path("startMs").asLong(-1) != first ||
             input.path("segment").path("endMs").asLong(-1) != previous ||
-            Math.abs(features.get(4).asDouble() - (previous - first) / 1000.0) > 0.001) {
+            Math.abs(features.get(definition.durationFeature()).asDouble() - (previous - first) / 1000.0) > 0.001) {
             throw invalid();
         }
         ObjectNode safe = mapper.createObjectNode();
-        safe.put("schemaVersion", 1);
-        safe.put("actionId", "standing_knee_raise");
+        safe.put("schemaVersion", definition.schemaVersion());
+        safe.put("actionId", definition.actionId());
+        // Preserve absence on legacy payloads: do not change their deduplication hash.
+        if (input.has("actionDefinitionVersion")) safe.put("actionDefinitionVersion", definition.version());
         safe.put("sampleId", input.path("sampleId").asText());
         safe.put("movementSide", input.path("movementSide").asText());
         safe.put("cameraView", input.path("cameraView").asText());

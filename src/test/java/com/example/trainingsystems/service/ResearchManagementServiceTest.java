@@ -105,6 +105,34 @@ class ResearchManagementServiceTest {
             .contains("\"sampleCount\":1");
     }
 
+    @Test void syntheticExportIsExplicitAndCannotMixStandingFeaturesOrVersions() throws Exception {
+        var registry = SyntheticResearchContract.REGISTRY;
+        service = new ResearchManagementService(authority, annotations, samples, consents, audits,
+            new ResearchSampleValidator(mapper, registry), new ResearchTrainingFeatureValidator(registry), mapper, "study-v1");
+        when(authority.authenticated(9L, "token")).thenReturn(manager);
+        var annotation = approved();
+        annotation.setLabel("test_match");
+        annotation.setActionDefinitionVersion("synthetic-v1");
+        when(annotations.findByStatus(eq("APPROVED"), any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(annotation)));
+        var sample = sample();
+        ObjectNode json = (ObjectNode) mapper.readTree(sample.getPayloadJson());
+        json.put("actionId", "synthetic_test_only");
+        json.put("actionDefinitionVersion", "synthetic-v1");
+        json.putArray("featureNames").add("duration_seconds");
+        json.putArray("features").add(0.3);
+        sample.setPayloadJson(json.toString());
+        when(samples.findById("sample-1")).thenReturn(Optional.of(sample));
+        when(consents.findById(1L)).thenReturn(Optional.of(consent(true)));
+        assertThat(entry(service.exportApproved(9L, "token"), "manifest.json")).contains("\"sampleCount\":0");
+        byte[] zip = service.exportApproved(9L, "token", "synthetic_test_only");
+        assertThat(entry(zip, "manifest.json")).contains("\"sampleCount\":1", "synthetic-v1", "duration_seconds");
+        assertThat(entry(zip, "samples/sample-1.json")).doesNotContain("peak_leg_height");
+        annotation.setActionDefinitionVersion("standing-knee-raise-v1");
+        assertThat(entry(service.exportApproved(9L, "token", "synthetic_test_only"), "manifest.json"))
+            .contains("\"sampleCount\":0");
+    }
+
     private ResearchAnnotationEntity approved() {
         var a = new ResearchAnnotationEntity();
         a.setSampleId("sample-1");

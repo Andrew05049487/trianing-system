@@ -25,15 +25,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /** Bounded, in-memory export; never writes training files to Render's disk. */
 @Service
 public class ResearchManagementService {
-    private static final Set<String> TRAINABLE_LABELS = Set.of(
-        "meets_requirement", "insufficient_range", "trunk_compensation");
     private static final int MAX_SAMPLES = 500;
     private static final int MAX_UNCOMPRESSED_BYTES = 20_000_000;
     private final ResearchAuthorityService authority;
@@ -74,7 +71,15 @@ public class ResearchManagementService {
 
     @Transactional
     public byte[] exportApproved(Long userId, String token) {
+        return exportApproved(userId, token, ResearchActionRegistry.STANDING);
+    }
+
+    @Transactional
+    public byte[] exportApproved(Long userId, String token, String actionId) {
         authority.requireManager(authority.authenticated(userId, token));
+        var definition = validator.action(actionId);
+        if (definition == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+            "UNSUPPORTED_RESEARCH_ACTION");
         if (consentVersion.isBlank()) throw new ResponseStatusException(
             HttpStatus.SERVICE_UNAVAILABLE, "RESEARCH_CONSENT_VERSION_UNSET");
         var page = annotations.findByStatus("APPROVED", PageRequest.of(0, MAX_SAMPLES + 1));
@@ -87,8 +92,7 @@ public class ResearchManagementService {
         int uncompressed = 0;
         try (ZipOutputStream zip = new ZipOutputStream(bytes, StandardCharsets.UTF_8)) {
             for (ResearchAnnotationEntity annotation : page.getContent()) {
-                if (!TRAINABLE_LABELS.contains(annotation.getLabel()) ||
-                    annotation.getReviewerUserId() == null || annotation.getReviewedAt() == null ||
+                if (annotation.getReviewerUserId() == null || annotation.getReviewedAt() == null ||
                     annotation.getReviewerUserId().equals(annotation.getTherapistUserId())) continue;
                 ResearchSampleEntity sample = samples.findById(annotation.getSampleId()).orElse(null);
                 if (sample == null) continue;
@@ -100,6 +104,11 @@ public class ResearchManagementService {
                 JsonNode stored = mapper.readTree(sample.getPayloadJson());
                 // Re-sanitize before export; never pass through unknown/direct identifiers.
                 ObjectNode safe = validator.validateStored(stored).safePayload();
+                if (!definition.actionId().equals(safe.path("actionId").asText()) ||
+                    !definition.acceptsVersion(safe) ||
+                    !definition.version().equals(annotation.getActionDefinitionVersion()) ||
+                    !definition.trainableLabels().contains(annotation.getLabel())) continue;
+                safe.put("actionDefinitionVersion", definition.version());
                 safe.put("sampleId", sample.getId());
                 safe.put("subjectId", sample.getSubjectId());
                 if (!trainingFeatures.matches(safe)) continue;
@@ -123,6 +132,9 @@ public class ResearchManagementService {
             ObjectNode manifest = mapper.createObjectNode();
             manifest.put("studyId", ResearchAuthorityService.STUDY_ID);
             manifest.put("schemaVersion", 1);
+            manifest.put("actionId", definition.actionId());
+            manifest.put("actionDefinitionVersion", definition.version());
+            manifest.set("featureNames", mapper.valueToTree(definition.featureNames()));
             manifest.put("sampleCount", count);
             manifest.put("exportedAt", Instant.now().toString());
             zip.putNextEntry(new ZipEntry("manifest.json"));

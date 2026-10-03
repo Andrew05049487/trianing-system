@@ -41,9 +41,6 @@ import java.util.UUID;
 public class ResearchDataService {
     private static final String PATIENT = "PATIENT";
     private static final String THERAPIST = "THERAPIST";
-    private static final Set<String> LABELS = Set.of(
-        "meets_requirement", "insufficient_range", "trunk_compensation", "unassessable"
-    );
 
     private final UserRepository users;
     private final UserBindingRepository bindings;
@@ -211,10 +208,11 @@ public class ResearchDataService {
         authority.requireAnnotator(therapist);
         ResearchSampleEntity sample = findSample(sampleId);
         requireAccess(therapist, sample);
-        if (!LABELS.contains(label) ||
+        var definition = sampleDefinition(sample);
+        if (definition == null || !definition.labels().contains(label) ||
             labelVersion == null || !labelVersion.matches("[A-Za-z0-9_.-]{1,64}") ||
             actionDefinitionVersion == null ||
-            !actionDefinitionVersion.matches("[A-Za-z0-9_.-]{1,64}") ||
+            !definition.version().equals(actionDefinitionVersion) ||
             (note != null && note.length() > 1000)) throw badRequest("INVALID_RESEARCH_LABEL");
         ResearchAnnotationEntity annotation = annotations.findForUpdate(sampleId)
             .orElseGet(ResearchAnnotationEntity::new);
@@ -385,9 +383,19 @@ public class ResearchDataService {
 
     private SampleView sampleView(ResearchSampleEntity sample) {
         ResearchAnnotationEntity annotation = annotations.findById(sample.getId()).orElse(null);
+        var definition = sampleDefinition(sample);
         return new SampleView(sample.getId(), sample.getClientSampleId(), sample.getSubjectId(),
             sample.getMovementSide(), sample.getCameraView(), sample.getCapturedAt(),
-            annotation == null ? "UNLABELED" : annotation.getStatus());
+            annotation == null ? "UNLABELED" : annotation.getStatus(),
+            definition == null ? null : definition.actionId(),
+            definition == null ? null : definition.schemaVersion(),
+            definition == null ? null : definition.version());
+    }
+
+    private ResearchActionRegistry.Definition sampleDefinition(ResearchSampleEntity sample) {
+        if (sample.getPayloadJson() == null) return null;
+        try { return validator.definition(mapper.readTree(sample.getPayloadJson())); }
+        catch (JsonProcessingException error) { return null; }
     }
 
     private AnnotationView annotationView(ResearchAnnotationEntity annotation) {
@@ -460,7 +468,8 @@ public class ResearchDataService {
                               String currentVersion, boolean available, String unavailableReason) {}
     public record SampleView(String id, String clientSampleId, String subjectId,
                              String movementSide, String cameraView, Instant capturedAt,
-                             String annotationStatus) {}
+                             String annotationStatus, String actionId, Integer schemaVersion,
+                             String actionDefinitionVersion) {}
     public record AnnotationView(String label, String note, String labelVersion,
                                  String actionDefinitionVersion, String status, Instant updatedAt,
                                  int revision, Long annotatorUserId, Instant submittedAt,
