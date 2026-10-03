@@ -18,6 +18,9 @@ import com.example.trainingsystems.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.context.ApplicationEventPublisher;
+import com.example.trainingsystems.chat.ChatRealtimeEvent;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -40,6 +43,7 @@ public class ChatService {
     private final ChatConversationRepository conversationRepository;
     private final ChatMessageRepository messageRepository;
     private final CustomExerciseIdentityService identityService;
+    private final ApplicationEventPublisher events;
 
     public ChatService(
         UserRepository userRepository,
@@ -47,7 +51,8 @@ public class ChatService {
         FriendshipRepository friendshipRepository,
         ChatConversationRepository conversationRepository,
         ChatMessageRepository messageRepository,
-        CustomExerciseIdentityService identityService
+        CustomExerciseIdentityService identityService,
+        ApplicationEventPublisher events
     ) {
         this.userRepository = userRepository;
         this.userBindingRepository = userBindingRepository;
@@ -55,6 +60,7 @@ public class ChatService {
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
         this.identityService = identityService;
+        this.events = events;
     }
 
     @Transactional(readOnly = true)
@@ -148,7 +154,9 @@ public class ChatService {
                 conversation.setConversationType(type);
                 conversation.setCreatedAt(now);
                 conversation.setUpdatedAt(now);
-                return toConversationDto(conversationRepository.save(conversation));
+                var saved = conversationRepository.save(conversation);
+                publish("CONVERSATION_CREATED", saved.getId(), null);
+                return toConversationDto(saved);
             });
     }
 
@@ -213,6 +221,7 @@ public class ChatService {
         conversation.setLastMessageAt(now);
         conversation.setUpdatedAt(now);
         conversationRepository.save(conversation);
+        publish("MESSAGE_CREATED", conversation.getId(), savedMessage.getId());
         return toMessageDto(savedMessage);
     }
 
@@ -227,11 +236,12 @@ public class ChatService {
             conversationId,
             currentUser
         );
-        messageRepository.markUnreadMessagesAsRead(
+        int changed = messageRepository.markUnreadMessagesAsRead(
             conversation.getId(),
             currentUser.getId(),
             Instant.now()
         );
+        if (changed > 0) publish("MESSAGE_READ", conversationId, null);
     }
 
     @Transactional(readOnly = true)
@@ -286,6 +296,27 @@ public class ChatService {
         return user;
     }
 
+    @Transactional(readOnly = true)
+    public void authenticateRealtime(Long userId, String identityToken) {
+        User user = requireCurrentUser(userId, identityToken);
+        if (!hasRole(user, PATIENT) && !hasRole(user, THERAPIST)) {
+            throw forbidden("此帳號無法使用真人聊天室");
+        }
+    }
+
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public List<Long> realtimeRecipients(Long conversationId) {
+        return conversationRepository.findById(conversationId)
+            .filter(this::hasActiveRelationship)
+            .map(c -> List.of(c.getParticipantOne().getId(), c.getParticipantTwo().getId()))
+            .orElse(List.of());
+    }
+
+    private void publish(String type, Long conversationId, Long messageId) {
+        events.publishEvent(new ChatRealtimeEvent(type, conversationId.toString(),
+            messageId == null ? null : messageId.toString()));
+    }
+
     private ChatConversationEntity requireParticipant(
         Long conversationId,
         User currentUser
@@ -298,6 +329,9 @@ public class ChatService {
             .orElseThrow(() -> notFound("聊天室不存在"));
         if (!isParticipant(conversation, currentUser.getId())) {
             throw forbidden("你不是此聊天室的參與者");
+        }
+        if (!hasActiveRelationship(conversation)) {
+            throw forbidden("聊天關係已失效，無法存取此聊天室");
         }
         return conversation;
     }
@@ -313,8 +347,13 @@ public class ChatService {
     private boolean hasActiveRelationship(
         ChatConversationEntity conversation
     ) {
-        if (conversation.getConversationType() != ChatConversationType.PEER) {
-            return true;
+        if (conversation.getConversationType() == ChatConversationType.THERAPIST) {
+            User one = conversation.getParticipantOne(), two = conversation.getParticipantTwo();
+            User patient = hasRole(one, PATIENT) ? one : two;
+            User therapist = hasRole(one, THERAPIST) ? one : two;
+            return hasRole(patient, PATIENT) && hasRole(therapist, THERAPIST)
+                && userBindingRepository.existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(
+                    patient.getId(), therapist.getId(), THERAPIST);
         }
         if (!hasRole(conversation.getParticipantOne(), PATIENT) ||
             !hasRole(conversation.getParticipantTwo(), PATIENT)) {

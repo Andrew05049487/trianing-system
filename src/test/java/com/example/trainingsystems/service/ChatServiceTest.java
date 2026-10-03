@@ -49,6 +49,7 @@ class ChatServiceTest {
     private ChatMessageRepository messageRepository;
     @Mock
     private CustomExerciseIdentityService identityService;
+    @Mock private org.springframework.context.ApplicationEventPublisher events;
 
     private ChatService service;
     private User patientA;
@@ -64,13 +65,16 @@ class ChatServiceTest {
             friendshipRepository,
             conversationRepository,
             messageRepository,
-            identityService
+            identityService,
+            events
         );
         patientA = user(1L, "PATIENT", "病患 A");
         patientB = user(2L, "PATIENT", "病患 B");
         therapist = user(7L, "THERAPIST", "治療師 T");
         outsider = user(99L, "PATIENT", "第三人");
         when(identityService.isConfigured()).thenReturn(true);
+        org.mockito.Mockito.lenient().when(friendshipRepository.existsByUserLowIdAndUserHighId(1L, 2L))
+            .thenReturn(true);
     }
 
     @Test
@@ -266,6 +270,10 @@ class ChatServiceTest {
 
         assertThat(messages).extracting(ChatMessageDto::text)
             .containsExactly("older", "newer");
+        var order = org.mockito.Mockito.inOrder(messageRepository, conversationRepository, events);
+        order.verify(messageRepository).save(any());
+        order.verify(conversationRepository).save(conversation);
+        order.verify(events).publishEvent(new com.example.trainingsystems.chat.ChatRealtimeEvent("MESSAGE_CREATED", "50", "3"));
         assertThat(sent.senderId()).isEqualTo(1L);
         assertThat(sent.text()).isEqualTo("hello");
         assertThat(conversation.getLastMessageText()).isEqualTo("hello");
@@ -405,6 +413,40 @@ class ChatServiceTest {
             () -> service.getConversations(1L, "wrong"),
             HttpStatus.FORBIDDEN
         );
+    }
+
+    @Test void removedTherapistBindingBlocksReadSendAndReadReceipts() {
+        authenticate(patientA);
+        var conversation = conversation(patientA, therapist);
+        conversation.setConversationType(ChatConversationType.THERAPIST);
+        when(conversationRepository.findById(50L)).thenReturn(Optional.of(conversation));
+        when(userBindingRepository.existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(1L, 7L, "THERAPIST")).thenReturn(false);
+        assertStatus(() -> service.getMessages(1L, TOKEN, 50L), HttpStatus.FORBIDDEN);
+        assertStatus(() -> service.sendMessage(1L, TOKEN, 50L, "blocked"), HttpStatus.FORBIDDEN);
+        assertStatus(() -> service.markAsRead(1L, TOKEN, 50L), HttpStatus.FORBIDDEN);
+        verify(messageRepository, never()).save(any());
+        verify(events, never()).publishEvent(any(Object.class));
+    }
+    @Test void readEventPublishedOnlyForActualUnreadChange() {
+        authenticate(patientB);
+        when(conversationRepository.findById(50L)).thenReturn(Optional.of(conversation(patientA, patientB)));
+        when(messageRepository.markUnreadMessagesAsRead(any(), any(), any())).thenReturn(1, 0);
+        service.markAsRead(2L, TOKEN, 50L); service.markAsRead(2L, TOKEN, 50L);
+        verify(events).publishEvent(new com.example.trainingsystems.chat.ChatRealtimeEvent("MESSAGE_READ", "50", null));
+    }
+    @Test void failedPersistenceNeverPublishesSuccessEvent() {
+        authenticate(patientA);
+        when(conversationRepository.findById(50L)).thenReturn(Optional.of(conversation(patientA, patientB)));
+        when(messageRepository.save(any())).thenThrow(new IllegalStateException("fixture failure"));
+        assertThatThrownBy(() -> service.sendMessage(1L, TOKEN, 50L, "fixture")).isInstanceOf(IllegalStateException.class);
+        verify(events, never()).publishEvent(any(Object.class));
+    }
+    @Test void revokedFriendshipBlocksHistoricalReadsAsWellAsSending() {
+        authenticate(patientA);
+        when(conversationRepository.findById(50L)).thenReturn(Optional.of(conversation(patientA, patientB)));
+        when(friendshipRepository.existsByUserLowIdAndUserHighId(1L, 2L)).thenReturn(false);
+        assertStatus(() -> service.getMessages(1L, TOKEN, 50L), HttpStatus.FORBIDDEN);
+        verify(messageRepository, never()).findTop200ByConversation_IdOrderBySentAtDesc(any());
     }
 
     private void authenticate(User user) {
