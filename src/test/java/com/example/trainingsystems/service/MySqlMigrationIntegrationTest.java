@@ -16,6 +16,7 @@ import java.io.ByteArrayInputStream;
 import java.util.zip.ZipInputStream;
 import java.nio.charset.StandardCharsets;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.beans.factory.annotation.Value;
@@ -57,6 +58,7 @@ class MySqlMigrationIntegrationTest {
     @Autowired PasswordResetCredentialRepository resetCredentials;
     @Autowired CustomExerciseIdentityService identity;
     @Autowired AccountService accounts;
+    @SpyBean AccountDataCleanupService dataCleanup;
     @Autowired CustomRehabExerciseService custom;
     @Autowired CustomExerciseAssignmentService customAssignments;
     @Autowired UnifiedExerciseAssignmentService assignments;
@@ -284,7 +286,13 @@ class MySqlMigrationIntegrationTest {
 
     @Test void noRetentionPolicyAndUnrelatedTherapistCannotUploadOrRead() throws Exception {
         User patient=user("PATIENT"), unrelated=user("THERAPIST"); grant(unrelated,true,true,false);
-        assertThatThrownBy(() -> testResearch().setConsent(patient.getId(),token(patient),true,"fixture-v1"))
+        // The shared local schema may now have an operator-configured policy. Model its
+        // absence in this service instance; never delete an actual policy to run a test.
+        var noPolicy = org.mockito.Mockito.mock(ResearchRetentionService.class);
+        when(noPolicy.currentPolicy()).thenReturn(java.util.Optional.empty());
+        var disabled = new ResearchDataService(users,bindings,identity,consents,samples,annotations,
+            revisions,audits,validator,authority,noPolicy,mapper,true,"fixture-v1");
+        assertThatThrownBy(() -> disabled.setConsent(patient.getId(),token(patient),true,"fixture-v1"))
             .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
         assertThat(authority.canAnnotate(unrelated)).isTrue();
         assertThat(productionResearch.list(unrelated.getId(),token(unrelated),0,20).getTotalElements()).isZero();
@@ -339,15 +347,21 @@ class MySqlMigrationIntegrationTest {
         // Explicit bounded committed fixture is necessary to observe rollback from outside the transaction.
         var tx=new TransactionTemplate(transactionManager);
         User[] fixture=tx.execute(status->{
-            User manager=user("THERAPIST"), patient=user("PATIENT"); grant(manager,false,false,true); bind(patient,manager);
+            User manager=user("THERAPIST"), patient=user("PATIENT"); bind(patient,manager);
             return new User[]{manager,patient};
         });
+        // Deterministic late failure, independent of whether this schema has other managers.
+        org.mockito.Mockito.doThrow(new org.springframework.web.server.ResponseStatusException(
+            org.springframework.http.HttpStatus.CONFLICT,"FIXTURE_LATE_DELETE_FAILURE"))
+            .when(dataCleanup).deleteForAccount(fixture[0].getId());
         try {
             assertThatThrownBy(()->accounts.deleteAccount(fixture[0].getId(),token(fixture[0]),"Fixture-password",null))
-                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("FIXTURE_LATE_DELETE_FAILURE");
             assertThat(users.findById(fixture[0].getId())).isPresent();
             assertThat(bindings.existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(fixture[1].getId(),fixture[0].getId(),"THERAPIST")).isTrue();
         } finally {
+            org.mockito.Mockito.doCallRealMethod().when(dataCleanup).deleteForAccount(fixture[0].getId());
             tx.executeWithoutResult(status->{
                 grants.deleteAll(grants.findAll().stream().filter(g->g.getUserId().equals(fixture[0].getId())).toList()); grants.flush();
                 accounts.deleteAccount(fixture[1].getId(),token(fixture[1]),"Fixture-password",null);

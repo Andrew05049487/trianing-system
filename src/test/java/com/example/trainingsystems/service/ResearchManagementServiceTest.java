@@ -98,6 +98,19 @@ class ResearchManagementServiceTest {
         verify(audits).save(any());
     }
 
+    @Test void approvedDemoNeverBecomesFormalTrainingData() throws Exception {
+        when(authority.authenticated(9L, "token")).thenReturn(manager);
+        when(annotations.findByStatus(eq("APPROVED"), any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(approved())));
+        var demo = sample(); demo.setClientSampleId("DEMO-HAND-001");
+        when(samples.findById("sample-1")).thenReturn(Optional.of(demo));
+        assertThat(entry(service.exportApproved(9L, "token"), "manifest.json"))
+            .contains("\"sampleCount\":0");
+        demo.setClientSampleId("ordinary-id"); demo.setSubjectId("DEV-SUBJECT-001");
+        assertThat(entry(service.exportApproved(9L, "token"), "manifest.json"))
+            .contains("\"sampleCount\":0");
+    }
+
     @Test void withdrawnOrUnassessableSamplesNeverExport() throws Exception {
         when(authority.authenticated(9L, "token")).thenReturn(manager);
         var approved = approved();
