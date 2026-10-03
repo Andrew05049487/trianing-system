@@ -34,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** Runs only against the explicitly supplied local MySQL database; all fixtures roll back. */
@@ -259,11 +260,26 @@ class MySqlMigrationIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM chat_conversations WHERE id=?",Integer.class,chat.id())).isZero();
     }
 
-    @Test void productionResearchRemainsDisabledAndUngrantableByPatient() {
+    @Test void productionResearchRemainsDisabledAndUngrantableByPatient() throws Exception {
         User patient = user("PATIENT"), therapist = user("THERAPIST");
         assertThatThrownBy(() -> productionResearch.setConsent(patient.getId(),token(patient),true,"fixture-v1")).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
         assertThat(authority.canManage(therapist)).isFalse(); assertThat(authority.canReview(patient)).isFalse();
         assertThatThrownBy(() -> authority.requireManager(therapist)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        mvc.perform(get("/api/ml-research/consent").header("X-User-Id", patient.getId())
+                .header("X-Custom-Exercise-Token", token(patient)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.available").value(false))
+            .andExpect(jsonPath("$.unavailableReason").value("RESEARCH_COLLECTION_NOT_ENABLED"));
+        mvc.perform(get("/api/ml-research/consent").header("X-User-Id", patient.getId())
+                .header("X-Custom-Exercise-Token", "invalid-fixture-token"))
+            .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/ml-research/consent").header("X-User-Id", therapist.getId())
+                .header("X-Custom-Exercise-Token", token(therapist)))
+            .andExpect(status().isForbidden());
+        mvc.perform(put("/api/ml-research/consent").header("X-User-Id", patient.getId())
+                .header("X-Custom-Exercise-Token", token(patient))
+                .contentType("application/json").content("{\"agree\":true,\"version\":\"fixture-v1\"}"))
+            .andExpect(status().isServiceUnavailable());
+        assertThat(consents.findById(patient.getId())).isEmpty();
     }
 
     @Test void noRetentionPolicyAndUnrelatedTherapistCannotUploadOrRead() throws Exception {
@@ -373,6 +389,46 @@ class MySqlMigrationIntegrationTest {
     private ResearchDataService testResearch() {
         // Only this test-local instance accepts synthetic consent; production bean stays disabled.
         return new ResearchDataService(users,bindings,identity,consents,samples,annotations,revisions,audits,validator,authority,retention,mapper,true,"fixture-v1");
+    }
+
+    @Test void syntheticActionRoundTripUsesMySqlWithoutProductionRegistration() throws Exception {
+        User patient=user("PATIENT"), annotator=user("THERAPIST"), reviewer=user("THERAPIST"), manager=user("THERAPIST");
+        bind(patient,annotator); bind(patient,reviewer);
+        grant(annotator,true,true,false); grant(reviewer,true,true,false); grant(manager,false,false,true);
+        retention.createPolicy(manager.getId(),token(manager),"synthetic-only-v1",1,Instant.now().minusSeconds(1),"SYNTHETIC-NOT-ETHICS-APPROVAL");
+        var registry = SyntheticResearchContract.REGISTRY;
+        var testValidator = new ResearchSampleValidator(mapper, registry);
+        var research = new ResearchDataService(users,bindings,identity,consents,samples,annotations,revisions,
+            audits,testValidator,authority,retention,mapper,true,"fixture-v1");
+        research.setConsent(patient.getId(),token(patient),true,"fixture-v1");
+        ObjectNode payload=samplePayload();
+        payload.put("actionId","synthetic_test_only");
+        payload.put("actionDefinitionVersion","synthetic-v1");
+        payload.putArray("featureNames").add("duration_seconds");
+        payload.putArray("features").add(0.3);
+        assertThatThrownBy(() -> validator.validate(payload)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        var uploaded=research.upload(patient.getId(),token(patient),payload);
+        entities.flush(); entities.clear();
+        assertThat(samples.findById(uploaded.id()).orElseThrow().getPayloadJson()).contains("synthetic-v1");
+        assertThat(research.upload(patient.getId(),token(patient),payload).id()).isEqualTo(uploaded.id());
+        assertThat(research.detail(annotator.getId(),token(annotator),uploaded.id()).sample().actionId()).isEqualTo("synthetic_test_only");
+        research.label(annotator.getId(),token(annotator),uploaded.id(),"test_match","fixture","synthetic-label-v1","synthetic-v1");
+        research.submitLabel(annotator.getId(),token(annotator),uploaded.id());
+        assertThatThrownBy(() -> research.reviewLabel(annotator.getId(),token(annotator),uploaded.id(),true,"fixture"))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        var exporter = new ResearchManagementService(authority,annotations,samples,consents,exportAudits,
+            testValidator,new ResearchTrainingFeatureValidator(registry),mapper,"fixture-v1");
+        assertThat(zipEntry(exporter.exportApproved(manager.getId(),token(manager),"synthetic_test_only"),"manifest.json"))
+            .contains("\"sampleCount\":0");
+        research.reviewLabel(reviewer.getId(),token(reviewer),uploaded.id(),true,"synthetic fixture only");
+        assertThat(zipEntry(exporter.exportApproved(manager.getId(),token(manager),"synthetic_test_only"),"manifest.json"))
+            .contains("\"sampleCount\":1", "synthetic-v1");
+        assertThat(zipEntry(exporter.exportApproved(manager.getId(),token(manager)),"manifest.json"))
+            .contains("\"sampleCount\":0");
+        research.setConsent(patient.getId(),token(patient),false,"fixture-v1");
+        assertThat(zipEntry(exporter.exportApproved(manager.getId(),token(manager),"synthetic_test_only"),"manifest.json"))
+            .contains("\"sampleCount\":0");
+        assertThat(productionResearch.consent(patient.getId(),token(patient)).available()).isFalse();
     }
     private void grant(User user,boolean annotate,boolean review,boolean manage) {
         var existing=entities.createQuery("select g from ResearchGrantEntity g where g.userId=:id and g.studyId=:study",ResearchGrantEntity.class).setParameter("id",user.getId()).setParameter("study",ResearchAuthorityService.STUDY_ID).getResultList();
