@@ -331,11 +331,18 @@ public class ResearchDataService {
     }
 
     private ConsentView consentView(ResearchConsentEntity consent) {
+        String unavailableReason = collectionUnavailableReason();
         return new ConsentView(consent != null && consent.isActive(),
             consent == null ? null : consent.getSubjectId(),
             consent == null ? null : consent.getConsentVersion(),
-            currentConsentVersion, collectionEnabled && !currentConsentVersion.isBlank() &&
-                retention.currentPolicy().isPresent());
+            currentConsentVersion, unavailableReason == null, unavailableReason);
+    }
+
+    private String collectionUnavailableReason() {
+        if (!collectionEnabled) return "RESEARCH_COLLECTION_NOT_ENABLED";
+        if (currentConsentVersion.isBlank()) return "RESEARCH_CONSENT_VERSION_UNSET";
+        if (retention.currentPolicy().isEmpty()) return "RESEARCH_RETENTION_UNSET";
+        return null;
     }
 
     private User authenticated(Long id, String token) {
@@ -364,10 +371,10 @@ public class ResearchDataService {
     }
 
     private void requireCollectionEnabled() {
-        if (!collectionEnabled || currentConsentVersion.isBlank() ||
-            retention.currentPolicy().isEmpty()) {
+        String reason = collectionUnavailableReason();
+        if (reason != null) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "RESEARCH_COLLECTION_NOT_ENABLED");
+                reason);
         }
     }
 
@@ -450,7 +457,7 @@ public class ResearchDataService {
     }
 
     public record ConsentView(boolean active, String subjectId, String consentVersion,
-                              String currentVersion, boolean available) {}
+                              String currentVersion, boolean available, String unavailableReason) {}
     public record SampleView(String id, String clientSampleId, String subjectId,
                              String movementSide, String cameraView, Instant capturedAt,
                              String annotationStatus) {}

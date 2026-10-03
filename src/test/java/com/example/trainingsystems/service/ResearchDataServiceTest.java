@@ -142,6 +142,46 @@ class ResearchDataServiceTest {
         verify(consents, never()).save(any());
     }
 
+    @Test void consentReportsClosedFlagWithoutCreatingConsent() {
+        authenticate(1L, "PATIENT");
+        when(consents.findById(1L)).thenReturn(Optional.empty());
+        var closed = new ResearchDataService(users, bindings, identity, consents,
+            samples, annotations, revisions, audits, validator, authority,
+            retention, mapper, false, "study-v1");
+        assertThat(closed.consent(1L, "token").available()).isFalse();
+        assertThat(closed.consent(1L, "token").unavailableReason())
+            .isEqualTo("RESEARCH_COLLECTION_NOT_ENABLED");
+        verify(consents, never()).save(any());
+    }
+
+    @Test void consentReportsUnsetVersionAndEffectivePolicySeparately() {
+        authenticate(1L, "PATIENT");
+        when(consents.findById(1L)).thenReturn(Optional.empty());
+        var unset = new ResearchDataService(users, bindings, identity, consents,
+            samples, annotations, revisions, audits, validator, authority,
+            retention, mapper, true, "");
+        assertThat(unset.consent(1L, "token").unavailableReason())
+            .isEqualTo("RESEARCH_CONSENT_VERSION_UNSET");
+        when(retention.currentPolicy()).thenReturn(Optional.empty());
+        assertThat(service.consent(1L, "token").unavailableReason())
+            .isEqualTo("RESEARCH_RETENTION_UNSET");
+        assertThatThrownBy(() -> service.setConsent(1L, "token", true, "study-v1"))
+            .isInstanceOf(ResponseStatusException.class)
+            .extracting(error -> ((ResponseStatusException) error).getReason())
+            .isEqualTo("RESEARCH_RETENTION_UNSET");
+    }
+
+    @Test void consentVersionMismatchRemainsRejectedWithoutSaving() {
+        authenticate(1L, "PATIENT");
+        when(consents.findById(1L)).thenReturn(Optional.empty());
+        assertThat(service.consent(1L, "token").unavailableReason()).isNull();
+        assertThatThrownBy(() -> service.setConsent(1L, "token", true, "obsolete"))
+            .isInstanceOf(ResponseStatusException.class)
+            .extracting(error -> ((ResponseStatusException) error).getReason())
+            .isEqualTo("CONSENT_VERSION_MISMATCH");
+        verify(consents, never()).save(any());
+    }
+
     @Test void invalidIdentityAndTherapistCannotConsent() {
         assertThatThrownBy(() -> service.consent(1L, "bad"))
             .isInstanceOf(ResponseStatusException.class)

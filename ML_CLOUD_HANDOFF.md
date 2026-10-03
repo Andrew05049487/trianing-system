@@ -82,3 +82,6 @@
 1. Read Flutter handoff at `d7b8015`; do not recreate completed consent/sync/player/label UI.
 2. After research governance approval, review/run migration manually, deploy compatible backend/Flutter, then Android E2E. Feature flag remains OFF by default.
 3. Design explicit researcher authorization for review/export; add approval, training export, stats and retention with separate tests/commits.
+# G3.5 checkpoint (2026-10-03)
+
+Branch `codex/g35-research-integration`, based on main `5394f735a461476ee692bf44350aafb0f6888648`. Stage A adds consent `unavailableReason` and distinct 503 reasons for closed collection, unset version, missing effective approved retention. Security gates unchanged. ResearchDataServiceTest + ResearchRetentionServiceTest: 23 PASS. Flutter compatible feature branch implements safe localized error parsing (18 focused tests PASS). No migration, Render or collection configuration changed. Next: action contracts, regression/build, actual local MySQL integration. Older SQL Server notes below are historical; R3 MySQL/validate remains authoritative.
