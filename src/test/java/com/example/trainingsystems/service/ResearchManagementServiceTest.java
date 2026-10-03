@@ -122,6 +122,18 @@ class ResearchManagementServiceTest {
             .contains("\"sampleCount\":0");
     }
 
+    @Test void ordinaryDeviceIdsFromDemoPatientCannotEnterFormalExport() throws Exception {
+        when(authority.authenticated(9L, "token")).thenReturn(manager);
+        when(annotations.findByStatus(eq("APPROVED"), any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(approved())));
+        var deviceSample = sample();
+        deviceSample.setClientSampleId("hand_device_generated_id");
+        when(samples.findById("sample-1")).thenReturn(Optional.of(deviceSample));
+        when(authority.isSyntheticParticipant(1L)).thenReturn(true);
+        assertThat(entry(service.exportApproved(9L, "token"), "manifest.json"))
+            .contains("\"sampleCount\":0");
+    }
+
     @Test void approvedOlderSampleUsesStoredValidationNotNewUploadAgeGate() throws Exception {
         when(authority.authenticated(9L, "token")).thenReturn(manager);
         when(annotations.findByStatus(eq("APPROVED"), any(Pageable.class)))

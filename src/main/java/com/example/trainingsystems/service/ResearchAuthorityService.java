@@ -59,6 +59,15 @@ public class ResearchAuthorityService {
         return grant(user).map(ResearchGrantEntity::isCanManage).orElse(false);
     }
 
+    /** Dataset hygiene only: does not affect login, consent, upload, viewing or grants. */
+    public boolean isSyntheticParticipant(Long userId) {
+        if (userId == null) return false;
+        return users.findById(userId).map(user -> user.getName() != null
+            && user.getName().startsWith("DEMO ") && user.getEmail() != null
+            && user.getEmail().toLowerCase(java.util.Locale.ROOT).endsWith("@demo.invalid"))
+            .orElse(false);
+    }
+
     public void requireAnnotator(User user) {
         if (!canAnnotate(user)) throw forbidden("RESEARCH_ANNOTATION_DENIED");
     }

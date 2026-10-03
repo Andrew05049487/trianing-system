@@ -103,7 +103,8 @@ public class ResearchManagementService {
                 if (sample == null) continue;
                 // Synthetic demos are never a formal training export, even on a non-demo server.
                 if (String.valueOf(sample.getClientSampleId()).startsWith("DEMO-") ||
-                    String.valueOf(sample.getSubjectId()).startsWith("DEV-SUBJECT-")) continue;
+                    String.valueOf(sample.getSubjectId()).startsWith("DEV-SUBJECT-") ||
+                    authority.isSyntheticParticipant(sample.getParticipantUserId())) continue;
                 if (sample.getExpiresAt() == null || !sample.getExpiresAt().isAfter(Instant.now())) continue;
                 ResearchConsentEntity consent = consents.findById(sample.getParticipantUserId()).orElse(null);
                 if (consent == null || !consent.isActive() ||

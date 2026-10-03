@@ -61,6 +61,22 @@ class ResearchAuthorityServiceTest {
             .thenReturn(Optional.of(grant));
     }
 
+    @Test void demoDatasetMarkerRequiresBothReservedEmailAndExplicitName() {
+        User user = new User();
+        user.setId(1L);
+        user.setEmail("demo_patient@demo.invalid");
+        user.setName("DEMO PATIENT");
+        when(users.findById(1L)).thenReturn(Optional.of(user));
+        assertThat(service.isSyntheticParticipant(1L)).isTrue();
+        user.setEmail("participant@example.com");
+        assertThat(service.isSyntheticParticipant(1L)).isFalse();
+        user.setEmail("demo_patient@demo.invalid");
+        user.setName("Participant");
+        assertThat(service.isSyntheticParticipant(1L)).isFalse();
+        assertThat(service.isSyntheticParticipant(null)).isFalse();
+        verify(grants, never()).save(any());
+    }
+
     @Test void invalidIdentityAndPatientCannotElevate() {
         assertThatThrownBy(() -> service.me(1L, "bad"))
             .isInstanceOf(ResponseStatusException.class)

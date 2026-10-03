@@ -13,7 +13,8 @@ function Headers($user) {return @{'X-User-Id'=[string]$user.userId;'X-Custom-Exe
 $manager=Login 'MANAGER';$mh=Headers $manager
 $authority=Invoke-RestMethod "$base/api/ml-research/authority/me" -Headers $mh -TimeoutSec 45
 if (!$authority.canManage) {throw 'Existing authenticated manager authorization required; no escalation performed.'}
-$policies=@(Invoke-RestMethod "$base/api/ml-research/management/retention" -Headers $mh -TimeoutSec 45)
+$policyResponse=Invoke-RestMethod "$base/api/ml-research/management/retention" -Headers $mh -TimeoutSec 45
+$policies=@($policyResponse | ForEach-Object {$_})
 $before=@{service=$base;managerId=$manager.userId;policies=$policies;recordedAt=[DateTime]::UtcNow.ToString('o')}
 $snapshot=Join-Path $repo '.local/render-research-policy-before.json'
 if (!(Test-Path -LiteralPath $snapshot)) {$before|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $snapshot -Encoding utf8}
