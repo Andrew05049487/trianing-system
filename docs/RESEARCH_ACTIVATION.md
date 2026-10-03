@@ -45,3 +45,8 @@ From backend PowerShell: `./tools/research-activation.ps1 -Action Seed` or `-Act
 - A proposed default-off operator-only first-manager initializer was blocked by automated safety review because exact target/environment confirmation was required. Patch was NOT applied. Await user confirmation for verified demo_manager@demo.invalid/user256 on this Render service/schema; no role change/public endpoint/anonymous elevation.
 - Pending tools: research-remote-accounts.ps1 (executed/PASS4 accounts), research-remote-configure.ps1 (NOT RUN pending actual manager), research-runtime-check.ps1 (initial login FAIL before remote accounts existed; full review chain NOT RUN). All three PowerShell syntax checks PASS.
 - Phone d698e1fa connected and user confirmed unlock; new cloud Android UI acceptance NOT RUN while actual retention/authority remain unset. Original installed G5 Release remains unchanged.
+
+## Explicit first-manager authorization (continuation)
+- Owner explicitly authorized verified Render user256/demo_manager@demo.invalid/THERAPIST. Default-off ApplicationRunner uses RESEARCH_INITIAL_MANAGER_USER_ID, RESEARCH_INITIAL_MANAGER_EMAIL and RESEARCH_INITIAL_MANAGER_REFERENCE; no public endpoint, secret, base-role changes or patient allowlist.
+- Initializer validates all settings and exact target identity, refuses another existing manager, performs grant/audit atomically at SERIALIZABLE isolation and is restart-idempotent. Remove operator settings after successful initialization.
+- Focused tests cover default-off/Spring bean creation, identity/role mismatches, first-manager audit, existing-manager refusal and idempotence. Actual Render execution pending.

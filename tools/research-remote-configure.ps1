@@ -15,7 +15,8 @@ $authority=Invoke-RestMethod "$base/api/ml-research/authority/me" -Headers $mh -
 if (!$authority.canManage) {throw 'Existing authenticated manager authorization required; no escalation performed.'}
 $policies=@(Invoke-RestMethod "$base/api/ml-research/management/retention" -Headers $mh -TimeoutSec 45)
 $before=@{service=$base;managerId=$manager.userId;policies=$policies;recordedAt=[DateTime]::UtcNow.ToString('o')}
-$before|ConvertTo-Json -Depth 10|Set-Content -LiteralPath (Join-Path $repo '.local/render-research-policy-before.json') -Encoding utf8
+$snapshot=Join-Path $repo '.local/render-research-policy-before.json'
+if (!(Test-Path -LiteralPath $snapshot)) {$before|ConvertTo-Json -Depth 10|Set-Content -LiteralPath $snapshot -Encoding utf8}
 $current=@($policies|Where-Object { [DateTime]$_.effectiveAt -le [DateTime]::UtcNow }|Sort-Object effectiveAt -Descending)
 if (!$current.Count) {
     if (@($policies|Where-Object policyVersion -eq 'hand-retention-v1').Count) {throw 'Future existing policy must not be overwritten.'}

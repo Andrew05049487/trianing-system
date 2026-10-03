@@ -45,6 +45,9 @@ if ($e2eDetail.annotation.status -ne 'APPROVED') {
         if ($submitted.status -ne 'SUBMITTED') { throw 'Submission failed.' }
     }
     $review = @{approve=$true;note='DEMO independent review only; not IRB or model approval'} | ConvertTo-Json
+    $self=Invoke-WebRequest "$BaseUrl/api/ml-research/samples/$($e2e.id)/label/review" -Headers $therapist -Method Post -ContentType 'application/json' -Body $review -TimeoutSec 45 -SkipHttpErrorCheck
+    if ($self.StatusCode -ne 403) {throw 'Self review must be forbidden.'}
+    Write-Output 'PASS: author with review authority still cannot approve own annotation (403).'
     $approved = Invoke-RestMethod "$BaseUrl/api/ml-research/samples/$($e2e.id)/label/review" -Headers $reviewer -Method Post -ContentType 'application/json' -Body $review -TimeoutSec 45
     if ($approved.status -ne 'APPROVED') { throw 'Independent review failed.' }
 }
