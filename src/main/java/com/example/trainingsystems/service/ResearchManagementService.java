@@ -42,6 +42,8 @@ public class ResearchManagementService {
     private final ResearchTrainingFeatureValidator trainingFeatures;
     private final ObjectMapper mapper;
     private final String consentVersion;
+    @Value("${research.hand-consent-version:}")
+    private String handConsentVersion = "";
 
     public ResearchManagementService(ResearchAuthorityService authority,
         ResearchAnnotationRepository annotations, ResearchSampleRepository samples,
@@ -82,6 +84,9 @@ public class ResearchManagementService {
             "UNSUPPORTED_RESEARCH_ACTION");
         if (consentVersion.isBlank()) throw new ResponseStatusException(
             HttpStatus.SERVICE_UNAVAILABLE, "RESEARCH_CONSENT_VERSION_UNSET");
+        if (definition.schemaVersion() == 2 && (handConsentVersion.isBlank() || !handConsentVersion.equals(consentVersion))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "HAND_RESEARCH_SCOPE_NOT_APPROVED");
+        }
         var page = annotations.findByStatus("APPROVED", PageRequest.of(0, MAX_SAMPLES + 1));
         if (page.getTotalElements() > MAX_SAMPLES) throw new ResponseStatusException(
             HttpStatus.PAYLOAD_TOO_LARGE, "RESEARCH_EXPORT_BATCH_TOO_LARGE");
@@ -107,6 +112,7 @@ public class ResearchManagementService {
                 if (!definition.actionId().equals(safe.path("actionId").asText()) ||
                     !definition.acceptsVersion(safe) ||
                     !definition.version().equals(annotation.getActionDefinitionVersion()) ||
+                    (definition.schemaVersion() == 2 && !"hand-research-v1".equals(annotation.getLabelVersion())) ||
                     !definition.trainableLabels().contains(annotation.getLabel())) continue;
                 safe.put("actionDefinitionVersion", definition.version());
                 safe.put("sampleId", sample.getId());
@@ -131,7 +137,7 @@ public class ResearchManagementService {
             zip.closeEntry();
             ObjectNode manifest = mapper.createObjectNode();
             manifest.put("studyId", ResearchAuthorityService.STUDY_ID);
-            manifest.put("schemaVersion", 1);
+            manifest.put("schemaVersion", definition.schemaVersion());
             manifest.put("actionId", definition.actionId());
             manifest.put("actionDefinitionVersion", definition.version());
             manifest.set("featureNames", mapper.valueToTree(definition.featureNames()));
@@ -148,7 +154,7 @@ public class ResearchManagementService {
         ResearchExportAuditEntity audit = new ResearchExportAuditEntity();
         audit.setActorUserId(userId);
         audit.setStudyId(ResearchAuthorityService.STUDY_ID);
-        audit.setSchemaVersion(1);
+        audit.setSchemaVersion(definition.schemaVersion());
         audit.setSampleCount(count);
         audit.setCreatedAt(Instant.now());
         audits.save(audit);

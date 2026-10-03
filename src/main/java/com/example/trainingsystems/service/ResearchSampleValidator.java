@@ -48,6 +48,7 @@ public class ResearchSampleValidator {
         try {
             if (mapper.writeValueAsBytes(input).length > MAX_JSON_BYTES) throw invalid();
         } catch (JsonProcessingException error) { throw invalid(); }
+        if (input.path("schemaVersion").asInt(-1) == 2) return validateHand(input, enforceRecentCapture);
         input.fieldNames().forEachRemaining(name -> {
             if (!ROOT_FIELDS.contains(name)) throw invalid();
         });
@@ -155,6 +156,33 @@ public class ResearchSampleValidator {
     private static boolean finite(JsonNode value, double min, double max) {
         return value.isNumber() && Double.isFinite(value.asDouble()) &&
             value.asDouble() >= min && value.asDouble() <= max;
+    }
+
+    private ValidatedSample validateHand(JsonNode input, boolean recent) {
+        Set<String> fields = Set.of("schemaVersion","actionId","actionDefinitionVersion","sampleId","subjectId",
+            "movementSide","anatomicalSide","cameraView","capturedAt","timestampMs","timestampOrigin",
+            "landmarkSource","extractorVersion","modelInputVersion","segment","featureNames","orderedFeatureNames","features","frames");
+        try {
+            input.fieldNames().forEachRemaining(k -> { if(!fields.contains(k)) throw invalid(); });
+            var def=actions.forSample(input);
+            if(def==null || def.schemaVersion()!=2 || !input.path("sampleId").asText("").matches("[A-Za-z0-9_-]{1,100}") ||
+                !Set.of("front","rear").contains(input.path("cameraView").asText())) throw invalid();
+            Instant capture=Instant.parse(input.path("capturedAt").asText());
+            if(recent && (capture.isAfter(Instant.now().plusSeconds(300)) || capture.isBefore(Instant.now().minusSeconds(365L*86400)))) throw invalid();
+            if(!mapper.valueToTree(def.featureNames()).equals(input.path("featureNames")) ||
+                !input.path("featureNames").equals(input.path("orderedFeatureNames"))) throw invalid();
+            double[] expected=ResearchHandFeatures.extract(input);
+            JsonNode features=input.path("features");
+            if(!features.isArray() || features.size()!=expected.length) throw invalid();
+            for(int i=0;i<expected.length;i++) if(!finite(features.get(i),-360,360) || Math.abs(features.get(i).asDouble()-expected[i])>1e-5) throw invalid();
+            ObjectNode safe=mapper.createObjectNode();
+            // Stable whitelist; subject identity is assigned by the existing authenticated service.
+            fields.stream().filter(k -> !k.equals("subjectId")).sorted().forEach(k -> {
+                if(!input.has(k)) throw invalid(); safe.set(k,input.get(k).deepCopy());
+            });
+            return new ValidatedSample(input.path("sampleId").asText(),"unknown",input.path("cameraView").asText(),capture,safe);
+        } catch (ResponseStatusException e) { throw e; }
+        catch (RuntimeException e) { throw invalid(); }
     }
 
     private static ResponseStatusException invalid() {

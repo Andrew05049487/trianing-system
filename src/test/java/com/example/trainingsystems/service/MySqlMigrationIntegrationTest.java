@@ -386,6 +386,44 @@ class MySqlMigrationIntegrationTest {
         assertThat(samples.findById(sample.id())).isEmpty();
     }
 
+    @Test void fourHandActionsConsentReviewExportAndExpiryRoundTripInMySql() throws Exception {
+        User patient=user("PATIENT"), annotator=user("THERAPIST"), reviewer=user("THERAPIST"), manager=user("THERAPIST");
+        bind(patient,annotator); bind(patient,reviewer);
+        grant(annotator,true,true,false); grant(reviewer,true,true,false); grant(manager,false,false,true);
+        retention.createPolicy(manager.getId(),token(manager),"g5-fixture-only",1,Instant.now().minusSeconds(1),"SYNTHETIC-NOT-ETHICS-APPROVAL");
+        var research=testResearch();
+        org.springframework.test.util.ReflectionTestUtils.setField(research,"handConsentVersion","fixture-v1");
+        research.setConsent(patient.getId(),token(patient),true,"fixture-v1");
+        var exporter=new ResearchManagementService(authority,annotations,samples,consents,exportAudits,validator,new ResearchTrainingFeatureValidator(),mapper,"fixture-v1");
+        org.springframework.test.util.ReflectionTestUtils.setField(exporter,"handConsentVersion","fixture-v1");
+        for(var definition:ResearchActionRegistry.HANDS) {
+            var payload=ResearchHandContractTest.fixture(definition.actionId());
+            payload.put("sampleId",unique());
+            var sample=research.upload(patient.getId(),token(patient),payload);
+            entities.flush(); entities.clear();
+            assertThat(samples.findById(sample.id()).orElseThrow().getMovementSide()).isEqualTo("unknown");
+            assertThat(research.upload(patient.getId(),token(patient),payload).id()).isEqualTo(sample.id());
+            assertThatThrownBy(()->research.label(annotator.getId(),token(annotator),sample.id(),"meets_requirement","fixture","wrong",definition.version()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+            research.label(annotator.getId(),token(annotator),sample.id(),"meets_requirement","synthetic only","hand-research-v1",definition.version());
+            research.submitLabel(annotator.getId(),token(annotator),sample.id());
+            assertThatThrownBy(()->research.reviewLabel(annotator.getId(),token(annotator),sample.id(),true,"self"))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+            assertThat(zipEntry(exporter.exportApproved(manager.getId(),token(manager),definition.actionId()),"manifest.json")).contains("\"sampleCount\":0");
+            research.reviewLabel(reviewer.getId(),token(reviewer),sample.id(),true,"synthetic review");
+            entities.flush();
+            assertThat(zipEntry(exporter.exportApproved(manager.getId(),token(manager),definition.actionId()),"manifest.json"))
+                .contains("\"sampleCount\":1","\"schemaVersion\":2",definition.actionId());
+            assertThatThrownBy(()->research.label(annotator.getId(),token(annotator),sample.id(),"unstable_motion","overwrite","hand-research-v1",definition.version()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        }
+        research.setConsent(patient.getId(),token(patient),false,"fixture-v1");
+        for(var definition:ResearchActionRegistry.HANDS) {
+            assertThat(zipEntry(exporter.exportApproved(manager.getId(),token(manager),definition.actionId()),"manifest.json")).contains("\"sampleCount\":0");
+        }
+        assertThat(productionResearch.consent(patient.getId(),token(patient)).handAvailable()).isFalse();
+    }
+
     private ResearchDataService testResearch() {
         // Only this test-local instance accepts synthetic consent; production bean stays disabled.
         return new ResearchDataService(users,bindings,identity,consents,samples,annotations,revisions,audits,validator,authority,retention,mapper,true,"fixture-v1");

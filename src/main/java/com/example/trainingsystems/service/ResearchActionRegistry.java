@@ -41,9 +41,20 @@ public final class ResearchActionRegistry {
         Set.of("meets_requirement", "insufficient_range", "trunk_compensation", "unassessable"),
         Set.of("meets_requirement", "insufficient_range", "trunk_compensation"), true,
         ResearchTrainingFeatureValidator::standingFeatures);
-    // Never add synthetic tests or arbitrary CUSTOM exercises here.
+    private static Definition hand(String id, List<String> features, String limitation) {
+        return new Definition(id, 2, id + "-hand-v1", features, Map.of(), Set.of(), Set.of(), 4,
+            Set.of("meets_requirement", limitation, "unstable_motion", "unassessable"),
+            Set.of("meets_requirement", limitation, "unstable_motion"), false, ResearchHandFeatures::extract);
+    }
+    public static final List<Definition> HANDS = List.of(
+        hand("turnPalm", List.of("axis_x_range", "palm_normal_z_range", "orientation_range_deg", "orientation_step_mean_deg", "duration_seconds"), "limited_rotation_proxy"),
+        hand("sidePinch", List.of("minimum_pinch_ratio", "maximum_pinch_ratio", "pinch_range", "wrist_travel_ratio", "duration_seconds"), "limited_pinch_motion"),
+        hand("wristExtension", List.of("minimum_relative_axis_deg", "maximum_relative_axis_deg", "axis_range_deg", "axis_step_mean_deg", "duration_seconds"), "limited_wrist_motion"),
+        hand("wristSideBend", List.of("minimum_relative_axis_deg", "maximum_relative_axis_deg", "axis_range_deg", "axis_step_mean_deg", "duration_seconds"), "limited_wrist_motion"));
+    // Registration does not expand approved study/consent scope.
     public static final ResearchActionRegistry PRODUCTION =
-        new ResearchActionRegistry(List.of(STANDING_DEFINITION));
+        new ResearchActionRegistry(java.util.stream.Stream.concat(
+            java.util.stream.Stream.of(STANDING_DEFINITION), HANDS.stream()).toList());
 
     private final Map<String, Definition> definitions;
     public ResearchActionRegistry(List<Definition> definitions) {

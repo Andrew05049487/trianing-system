@@ -56,6 +56,9 @@ public class ResearchDataService {
     private final ObjectMapper mapper;
     private final boolean collectionEnabled;
     private final String currentConsentVersion;
+    // Empty by default: existing standing consent never implicitly covers hand actions.
+    @Value("${research.hand-consent-version:}")
+    private String handConsentVersion = "";
 
     public ResearchDataService(
         UserRepository users, UserBindingRepository bindings,
@@ -125,6 +128,11 @@ public class ResearchDataService {
             throw forbidden("RESEARCH_CONSENT_REQUIRED");
         }
         ResearchSampleValidator.ValidatedSample validated = validator.validate(payload);
+        if (payload.path("schemaVersion").asInt(-1) == 2 &&
+            (handConsentVersion.isBlank() || !handConsentVersion.equals(currentConsentVersion) ||
+                !handConsentVersion.equals(consent.getConsentVersion()))) {
+            throw forbidden("HAND_RESEARCH_SCOPE_NOT_APPROVED");
+        }
         String canonical = writeJson(validated.safePayload());
         String fingerprint = sha256(canonical);
         Optional<ResearchSampleEntity> previous = samples
@@ -211,6 +219,7 @@ public class ResearchDataService {
         var definition = sampleDefinition(sample);
         if (definition == null || !definition.labels().contains(label) ||
             labelVersion == null || !labelVersion.matches("[A-Za-z0-9_.-]{1,64}") ||
+            (definition.schemaVersion() == 2 && !"hand-research-v1".equals(labelVersion)) ||
             actionDefinitionVersion == null ||
             !definition.version().equals(actionDefinitionVersion) ||
             (note != null && note.length() > 1000)) throw badRequest("INVALID_RESEARCH_LABEL");
@@ -333,7 +342,8 @@ public class ResearchDataService {
         return new ConsentView(consent != null && consent.isActive(),
             consent == null ? null : consent.getSubjectId(),
             consent == null ? null : consent.getConsentVersion(),
-            currentConsentVersion, unavailableReason == null, unavailableReason);
+            currentConsentVersion, unavailableReason == null, unavailableReason,
+            unavailableReason == null && !handConsentVersion.isBlank() && handConsentVersion.equals(currentConsentVersion));
     }
 
     private String collectionUnavailableReason() {
@@ -465,7 +475,7 @@ public class ResearchDataService {
     }
 
     public record ConsentView(boolean active, String subjectId, String consentVersion,
-                              String currentVersion, boolean available, String unavailableReason) {}
+                              String currentVersion, boolean available, String unavailableReason, boolean handAvailable) {}
     public record SampleView(String id, String clientSampleId, String subjectId,
                              String movementSide, String cameraView, Instant capturedAt,
                              String annotationStatus, String actionId, Integer schemaVersion,

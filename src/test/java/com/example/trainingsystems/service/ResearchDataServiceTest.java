@@ -67,6 +67,29 @@ class ResearchDataServiceTest {
         org.mockito.Mockito.lenient().when(retention.currentPolicy()).thenReturn(Optional.of(policy));
     }
 
+    @Test void handUploadRequiresNewApprovedScopeThenUsesSameDedupAndAnnotationContract() {
+        authenticate(1L,"PATIENT");
+        var consent=new ResearchConsentEntity(); consent.setActive(true); consent.setUserId(1L);
+        consent.setConsentVersion("study-v1"); consent.setSubjectId("synthetic-subject");
+        when(consents.findById(1L)).thenReturn(Optional.of(consent));
+        var hand=ResearchHandContractTest.fixture("sidePinch");
+        assertThatThrownBy(()->service.upload(1L,"token",hand)).isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("HAND_RESEARCH_SCOPE_NOT_APPROVED");
+        verify(samples,never()).saveAndFlush(any());
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"handConsentVersion","study-v1");
+        when(samples.findByParticipantUserIdAndClientSampleId(1L,"synthetic-hand")).thenReturn(Optional.empty());
+        var result=service.upload(1L,"token",hand);
+        assertThat(result.movementSide()).isEqualTo("unknown");
+        assertThat(result.actionId()).isEqualTo("sidePinch");
+        var captor=org.mockito.ArgumentCaptor.forClass(ResearchSampleEntity.class);
+        verify(samples).saveAndFlush(captor.capture());
+        var stored=captor.getValue();
+        assertThat(stored.getPayloadJson()).contains("mediapipe_hand_21","synthetic-subject").doesNotContain("confidence");
+        when(samples.findByParticipantUserIdAndClientSampleId(1L,"synthetic-hand")).thenReturn(Optional.of(stored));
+        assertThat(service.upload(1L,"token",hand).id()).isEqualTo(stored.getId());
+        verify(samples,org.mockito.Mockito.times(1)).saveAndFlush(any());
+    }
+
     private void authenticate(long id, String role) {
         User user = new User();
         user.setId(id);

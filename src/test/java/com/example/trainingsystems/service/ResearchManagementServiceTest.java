@@ -64,6 +64,24 @@ class ResearchManagementServiceTest {
             .isInstanceOf(ResponseStatusException.class);
     }
 
+    @Test void handExportRequiresSeparateConsentAndIndependentApprovedReview() throws Exception {
+        when(authority.authenticated(9L,"token")).thenReturn(manager);
+        assertThatThrownBy(()->service.exportApproved(9L,"token","sidePinch"))
+            .hasMessageContaining("HAND_RESEARCH_SCOPE_NOT_APPROVED");
+        org.springframework.test.util.ReflectionTestUtils.setField(service,"handConsentVersion","study-v1");
+        var a=approved(); a.setActionDefinitionVersion("sidePinch-hand-v1");
+        a.setLabelVersion("hand-research-v1");
+        when(annotations.findByStatus(eq("APPROVED"),any(Pageable.class))).thenReturn(new PageImpl<>(List.of(a)));
+        var s=sample(); s.setPayloadJson(ResearchHandContractTest.fixture("sidePinch").toString());
+        when(samples.findById("sample-1")).thenReturn(Optional.of(s));
+        when(consents.findById(1L)).thenReturn(Optional.of(consent(true)));
+        var zip=service.exportApproved(9L,"token","sidePinch");
+        assertThat(entry(zip,"manifest.json")).contains("\"schemaVersion\":2","\"sampleCount\":1","sidePinch");
+        assertThat(entry(zip,"samples/sample-1.json")).contains("orderedFeatureNames","unknown").doesNotContain("confidence");
+        a.setReviewerUserId(a.getTherapistUserId());
+        assertThat(entry(service.exportApproved(9L,"token","sidePinch"),"manifest.json")).contains("\"sampleCount\":0");
+    }
+
     @Test void approvedConsentSampleExportsPythonCompatibleZipWithoutAccountIds() throws Exception {
         when(authority.authenticated(9L, "token")).thenReturn(manager);
         var annotation = approved();
