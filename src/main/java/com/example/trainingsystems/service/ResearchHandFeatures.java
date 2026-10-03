@@ -63,6 +63,7 @@ public final class ResearchHandFeatures {
             return new double[]{ratios.stream().mapToDouble(Double::doubleValue).min().orElseThrow(),ratios.stream().mapToDouble(Double::doubleValue).max().orElseThrow(),range(ratios),travel,duration};
         }
         require(range(axis)>=1);
+        require(range(axis)<=360 && axis.stream().allMatch(v->Math.abs(v)<=360));
         if("turnPalm".equals(action)) {
             List<Double> xs=new ArrayList<>(), normals=new ArrayList<>();
             for(JsonNode p:points) {

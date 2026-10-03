@@ -16,3 +16,8 @@ main `7c55d1c7527d94ca0e23c50213f68f7e4f973d7a`, initial clean; fetch local/remo
 
 ## Remaining / continuation
 Flutter runtime/model release tests, full regression/analyze/debug/release/device acceptance still ongoing; see Flutter docs/G5_PROGRESS.md. Native pipeline/dependencies untouched. Formal professional definitions/data/models/device model latency NOT READY/NOT RUN, never substitute fixture metrics. Run git status/log before continuing; preserve all tested work. No push/deploy or real collection without separate authorization.
+
+## Final feature-bound/package verification
+- Non-pinch unwrapped image-axis range/excursion above360° rejected, matching Dart/Python/ONNX input quality bounds. Focused ResearchHandContractTest2/2 PASS after this hardening (`target/g5-final-bounds.log`).
+- Actual MySQL integration suite rerun after final hardening:22/22 PASS,0errors/skip (`target/g5-mysql-final.log` + surefire XML). No DDL/migration, synthetic fixtures rolled back. `mvn package -DskipTests` PASS (`target/g5-package.log`).
+- Flutter compatible runtime checkpoint `2485976`; full497PASS/7baselineFAIL. Final build/hardware results recorded by Flutter G5 documents, not inferred here.
