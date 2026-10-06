@@ -12,10 +12,10 @@
 - Local MySQL 8.4.11 confirmed; DPAPI rehab_app credential, CRUD only on old schema.
 - User completed fresh isolated rehab_body_r3_validation setup.
 - PASS actual metadata: MySQL 8.4.11, 29 tables, 253 columns, V004 including REJECTED.
-- V005 review/resample metadata not yet applied. tools/body-round3-review-migration.ps1 requests root only through local interactive prompt.
+- V005 subsequently applied by owner. Read-only local metadata PASS on 2026-10-06: 29 tables/257 columns/34 FK; no V001-V004 replay.
 - Pi camera TCP reachable; only Android phone connected, not TV hardware.
 
-## Implementation/testing
+## Implementation/testing (pre-V005 checkpoint, preserved history)
 - Implemented review/disposition/resample/revision guard and v3 source-specific export.
 - PASS backend focused 58/58 (10 new review tests and 7 export tests).
 - Latest full mvn test PASS: 328 discovered, 298 passed, 30 skipped. Seven new real MySQL tests skipped pending V005; not a MySQL PASS. mvn package -DskipTests PASS.
@@ -32,6 +32,16 @@
 - Final Flutter master focused 61/61, TV focused 35/35, scoped analyzes zero issues; phone and TV Debug/Release builds PASS.
 - Flutter full run 545 passed / 7 inherited failures, not all passing. Detailed evidence kept in Flutter report.
 - git diff --check PASS. Local checkpoint commit only; no push or deployment.
-- Next: owner runs tools/body-round3-review-migration.ps1 once for V005 (confirmed not yet executed), then tools/body-round3-mysql-test.ps1 using app CRUD credential.
+- V005 continuation complete locally: tools/body-round3-mysql-test.ps1 expanded real MySQL run PASS 12/12, zero skips. No root or migration needed for reruns.
 - Do not replay setup/V001-V004. No laboratory or production operation authorized.
-- Actual Hibernate/API/concurrency and Pi/TV hardware E2E NOT RUN. Round 3 PARTIAL, not ready for Round 4.
+- Actual local Hibernate/API/concurrency PASS; Pi/TV hardware E2E still NOT RUN. Round 3 PARTIAL, not ready for Round 4.
+
+## Local MySQL validation completed — 2026-10-06
+- Original seven real MySQL cases passed before expanding explicit assertions.
+- Expanded 12/12 PASS: schema/Hibernate, v1/v2/v3 CRUD, duplicate retry/attempt uniqueness, concurrent upload/first draft, HTTP 403/409, revision/disposition/audit, resample linkage and export filtering.
+- Expanded first run FAIL (one assertion/one fixture error): ZIP content-type includes charset; duplicate synthetic research grant. Corrected semantic MIME assertion/test-helper upsert only; business code/schema unchanged. Failure evidence retained.
+- All 29 tables exact COUNT(*) zero after fixtures rollback/precise concurrent cleanup. No truncate/table clear or auto-increment reset.
+- Latest full Maven (DB_URL removed from child process): 331 discovered, 298 passed, 33 skipped, zero failures/errors. Ten Body methods skipped here; separate actual MySQL run executes twelve parameterized cases and passes. Package PASS.
+- Normal research collection remains false; only test-local synthetic service accepts fixtures. No laboratory/prod connection or deployment, push or Round 4.
+- Evidence/matrix: docs/BODY_RESEARCH_ROUND3_MYSQL_VALIDATION.md; target/body-r3-mysql-validation.log; target/body-r3-post-v005-full-maven.log; target/body-r3-post-v005-package.log.
+- Remaining: isolated Android/Pi/TV hardware E2E and release runtime acceptance; laboratory NOT VALIDATED; production NOT DEPLOYED.

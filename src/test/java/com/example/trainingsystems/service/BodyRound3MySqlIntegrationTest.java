@@ -7,10 +7,13 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.*;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.web.servlet.MockMvcPrint;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,11 +33,12 @@ import static org.assertj.core.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-/** Local isolated MySQL only. Every fixture and policy rolls back, not a study approval. */
+/** Local isolated MySQL only. Fixtures roll back or receive exact cleanup, not study approval. */
 @SpringBootTest(properties={"spring.jpa.hibernate.ddl-auto=validate","spring.jpa.show-sql=false",
     "research.collection-enabled=false","research.consent-version=round3-synthetic-v1",
-    "research.hand-consent-version=round3-synthetic-v1"})
-@AutoConfigureMockMvc
+    "research.hand-consent-version=round3-synthetic-v1",
+    "logging.level.org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping=INFO"})
+@AutoConfigureMockMvc(print=MockMvcPrint.NONE)
 @Transactional
 @EnabledIfEnvironmentVariable(named="DB_URL",matches="jdbc:mysql://127\\.0\\.0\\.1:3306/rehab_body_r3_validation\\?.*")
 class BodyRound3MySqlIntegrationTest {
@@ -73,6 +77,7 @@ class BodyRound3MySqlIntegrationTest {
     @Test void validateMetadataAndProductionFlagRemainsClosed() {
         assertThat(entities.getMetamodel().getEntities()).hasSize(29);
         assertThat(jdbc.queryForObject("SELECT VERSION()",String.class)).isEqualTo("8.4.11");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE'",Integer.class)).isEqualTo(29);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE()",Integer.class)).isEqualTo(257);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE()",Integer.class)).isEqualTo(34);
         assertThat(productionResearch.consent(patient.getId(),token(patient)).available()).isFalse();
@@ -86,7 +91,7 @@ class BodyRound3MySqlIntegrationTest {
         assertThatThrownBy(()->research.upload(patient.getId(),token(patient),duplicateAttempt)).hasMessageContaining("409");
         assertThat(samples.findByParticipantUserId(patient.getId())).hasSize(1);
     }
-    @Test void v1BodyAndV2HandPersistWithNullableV3Metadata() {
+    @Test void v1BodyAndV2HandCrudWithNullableV3Metadata() {
         var v1=legacyBody();var b=research.upload(patient.getId(),token(patient),v1);
         var v2=ResearchHandContractTest.fixture("sidePinch");v2.put("sampleId",UUID.randomUUID().toString());
         var h=research.upload(patient.getId(),token(patient),v2);
@@ -95,22 +100,62 @@ class BodyRound3MySqlIntegrationTest {
         assertThat(research.detail(patient.getId(),token(patient),h.id()).payload().path("schemaVersion").asInt()).isEqualTo(2);
         assertThat(samples.findById(b.id()).orElseThrow().getSource()).isNull();
         assertThat(samples.findById(h.id()).orElseThrow().getAttemptId()).isNull();
+        research.label(author.getId(),token(author),b.id(),"insufficient_range","legacy draft","research-v1","standing-knee-raise-v1");
+        research.label(author.getId(),token(author),b.id(),"meets_requirement","updated legacy draft","research-v1","standing-knee-raise-v1");
+        research.label(author.getId(),token(author),h.id(),"limited_pinch_motion","hand draft","hand-research-v1","sidePinch-hand-v1");
+        research.label(author.getId(),token(author),h.id(),"meets_requirement","updated hand draft","hand-research-v1","sidePinch-hand-v1");
+        entities.flush();entities.clear();
+        assertThat(research.detail(author.getId(),token(author),b.id()).annotation().revision()).isEqualTo(2);
+        assertThat(research.detail(author.getId(),token(author),h.id()).annotation().label()).isEqualTo("meets_requirement");
+        research.deleteOwnSample(patient.getId(),token(patient),b.id());
+        research.deleteOwnSample(patient.getId(),token(patient),h.id());entities.flush();entities.clear();
+        assertThat(samples.findById(b.id())).isEmpty();assertThat(samples.findById(h.id())).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM research_retention_events WHERE actor_user_id=? AND reason='PATIENT_DELETED'",Integer.class,patient.getId())).isEqualTo(2);
     }
     @Test void apiUploadIndependentReviewAndSourceSpecificExport() throws Exception {
         var response=mvc.perform(post("/api/ml-research/samples").header("X-User-Id",patient.getId())
             .header("X-Custom-Exercise-Token",token(patient)).contentType("application/json").content(body().toString()))
             .andExpect(status().isOk()).andReturn().getResponse();
         String id=mapper.readTree(response.getContentAsString()).path("id").asText();
-        lifecycle(id,"APPROVE");entities.flush();
-        assertThat(entry(management.exportApproved(manager.getId(),token(manager),"standing_knee_raise",3,"tv_pi"),"manifest.json")).contains("\"sampleCount\":1","sessionGrouping");
+        mvc.perform(get("/api/ml-research/samples/{id}",id).header("X-User-Id",author.getId()).header("X-Custom-Exercise-Token",token(author)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.sample.source").value("tv_pi"));
+        var label=labelRequest(0);
+        mvc.perform(put("/api/ml-research/samples/{id}/label",id).header("X-User-Id",author.getId())
+            .header("X-Custom-Exercise-Token",token(author)).contentType("application/json").content(label.toString()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(1));
+        mvc.perform(post("/api/ml-research/samples/{id}/label/submit",id).header("X-User-Id",author.getId())
+            .header("X-Custom-Exercise-Token",token(author)).contentType("application/json").content("{\"expectedRevision\":1}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUBMITTED"));
+        mvc.perform(post("/api/ml-research/samples/{id}/label/review",id).header("X-User-Id",reviewer.getId())
+            .header("X-Custom-Exercise-Token",token(reviewer)).contentType("application/json")
+            .content("{\"decision\":\"APPROVE\",\"note\":\"synthetic review\",\"expectedRevision\":2}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.revision").value(3));
+        entities.flush();entities.clear();
+        assertThat(jdbc.queryForObject("SELECT revision FROM research_annotations WHERE sample_id=?",Integer.class,id)).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT disposition FROM research_samples WHERE id=?",String.class,id)).isEqualTo("ACTIVE");
+        assertThat(jdbc.queryForList("SELECT status FROM research_annotation_revisions WHERE sample_id=? ORDER BY revision",String.class,id))
+            .containsExactly("DRAFT","SUBMITTED","APPROVED");
+        assertThat(jdbc.queryForList("SELECT action FROM research_audit WHERE sample_id=? ORDER BY id",String.class,id))
+            .containsExactly("SAMPLE_UPLOADED","LABEL_DRAFT_SAVED","LABEL_SUBMITTED","LABEL_APPROVED");
+        var exported=mvc.perform(get("/api/ml-research/management/export").param("actionId","standing_knee_raise").param("schemaVersion","3").param("source","tv_pi")
+            .header("X-User-Id",manager.getId()).header("X-Custom-Exercise-Token",token(manager)))
+            .andExpect(status().isOk()).andExpect(content().contentTypeCompatibleWith("application/zip")).andReturn().getResponse().getContentAsByteArray();
+        assertThat(entry(exported,"manifest.json")).contains("\"sampleCount\":1","sessionGrouping");
         assertThat(entry(management.exportApproved(manager.getId(),token(manager),"standing_knee_raise",3,"phone"),"manifest.json")).contains("\"sampleCount\":0");
+        entities.flush();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM research_export_audit WHERE actor_user_id=? AND schema_version=3",Integer.class,manager.getId())).isEqualTo(2);
+        mvc.perform(delete("/api/ml-research/samples/{id}",id).header("X-User-Id",patient.getId()).header("X-Custom-Exercise-Token",token(patient)))
+            .andExpect(status().isNoContent());entities.flush();entities.clear();
+        assertThat(samples.findById(id)).isEmpty();assertThat(annotations.findById(id)).isEmpty();
     }
     @Test void needsResampleIsImmutableAndLinkedNewSampleGetsNewReview() throws Exception {
         var parent=research.upload(patient.getId(),token(patient),body());lifecycle(parent.id(),"NEEDS_RESAMPLE");
         String original=samples.findById(parent.id()).orElseThrow().getPayloadJson();
         var next=body();next.put("resampleOfSampleId",parent.id());var child=research.upload(patient.getId(),token(patient),next);
         assertThat(child.resampleOfSampleId()).isEqualTo(parent.id());assertThat(child.id()).isNotEqualTo(parent.id());
-        lifecycle(child.id(),"APPROVE");entities.flush();
+        lifecycle(child.id(),"APPROVE");entities.flush();entities.clear();
+        assertThat(jdbc.queryForObject("SELECT resample_of_sample_id FROM research_samples WHERE id=?",String.class,child.id())).isEqualTo(parent.id());
+        assertThat(jdbc.queryForObject("SELECT reason_code FROM research_annotations WHERE sample_id=?",String.class,parent.id())).isEqualTo("LOW_QUALITY");
         assertThat(samples.findById(parent.id()).orElseThrow().getPayloadJson()).isEqualTo(original);
         assertThat(samples.findById(parent.id()).orElseThrow().getDisposition()).isEqualTo("NEEDS_RESAMPLE");
         assertThat(entry(management.exportApproved(manager.getId(),token(manager),"standing_knee_raise",3,"tv_pi"),"manifest.json")).contains("\"sampleCount\":1");
@@ -121,6 +166,55 @@ class BodyRound3MySqlIntegrationTest {
         assertThatThrownBy(()->research.detail(other.getId(),token(other),sample.id())).hasMessageContaining("403");
         research.setConsent(patient.getId(),token(patient),false,"round3-synthetic-v1");entities.flush();
         assertThat(entry(management.exportApproved(manager.getId(),token(manager),"standing_knee_raise",3,"tv_pi"),"manifest.json")).contains("\"sampleCount\":0");
+    }
+    @ParameterizedTest @ValueSource(strings={"RETURN","REJECT","NEEDS_RESAMPLE"})
+    void reviewDispositionRevisionAndAuditPersistAndExcludeExport(String decision) throws Exception {
+        var sample=research.upload(patient.getId(),token(patient),body());lifecycle(sample.id(),decision);
+        entities.flush();entities.clear();
+        String disposition=switch(decision){case "REJECT"->"REJECTED";case "NEEDS_RESAMPLE"->"NEEDS_RESAMPLE";default->"ACTIVE";};
+        var detail=research.detail(reviewer.getId(),token(reviewer),sample.id());
+        assertThat(detail.sample().disposition()).isEqualTo(disposition);
+        assertThat(detail.annotation().status()).isEqualTo("RETURNED");
+        assertThat(detail.annotation().revision()).isEqualTo(3);
+        assertThat(detail.annotation().reviewerUserId()).isEqualTo(reviewer.getId());
+        assertThat(detail.annotation().reviewedAt()).isNotNull();
+        assertThat(detail.annotation().reasonCode()).isEqualTo("LOW_QUALITY");
+        assertThat(jdbc.queryForObject("SELECT disposition FROM research_annotation_revisions WHERE sample_id=? AND revision=3",String.class,sample.id())).isEqualTo(disposition);
+        assertThat(jdbc.queryForObject("SELECT reason_code FROM research_annotation_revisions WHERE sample_id=? AND revision=3",String.class,sample.id())).isEqualTo("LOW_QUALITY");
+        assertThat(jdbc.queryForList("SELECT action FROM research_audit WHERE sample_id=? ORDER BY id",String.class,sample.id()))
+            .containsExactly("SAMPLE_UPLOADED","LABEL_DRAFT_SAVED","LABEL_SUBMITTED","LABEL_"+decision);
+        assertThat(entry(management.exportApproved(manager.getId(),token(manager),"standing_knee_raise",3,"tv_pi"),"manifest.json")).contains("\"sampleCount\":0");
+    }
+    @Test void staleRevisionAndDifferentPayloadReturnHttp409() throws Exception {
+        var payload=body();var sample=research.upload(patient.getId(),token(patient),payload);
+        var changed=payload.deepCopy();changed.put("cameraView","front");
+        mvc.perform(post("/api/ml-research/samples").header("X-User-Id",patient.getId()).header("X-Custom-Exercise-Token",token(patient))
+            .contentType("application/json").content(changed.toString())).andExpect(status().isConflict());
+        research.label(author.getId(),token(author),sample.id(),"insufficient_range","test draft","body-attempt-label-v1",ResearchBodyAttemptValidator.DEFINITION,0);
+        mvc.perform(put("/api/ml-research/samples/{id}/label",sample.id()).header("X-User-Id",author.getId())
+            .header("X-Custom-Exercise-Token",token(author)).contentType("application/json").content(labelRequest(0).toString())).andExpect(status().isConflict());
+        mvc.perform(post("/api/ml-research/samples/{id}/label/submit",sample.id()).header("X-User-Id",author.getId())
+            .header("X-Custom-Exercise-Token",token(author)).contentType("application/json").content("{\"expectedRevision\":0}")).andExpect(status().isConflict());
+        research.submitLabel(author.getId(),token(author),sample.id(),1);
+        mvc.perform(post("/api/ml-research/samples/{id}/label/review",sample.id()).header("X-User-Id",reviewer.getId())
+            .header("X-Custom-Exercise-Token",token(reviewer)).contentType("application/json")
+            .content("{\"decision\":\"APPROVE\",\"expectedRevision\":1}")).andExpect(status().isConflict());
+        entities.flush();entities.clear();
+        assertThat(jdbc.queryForObject("SELECT revision FROM research_annotations WHERE sample_id=?",Integer.class,sample.id())).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM research_annotation_revisions WHERE sample_id=?",Integer.class,sample.id())).isEqualTo(2);
+    }
+    @Test void unauthorizedAndSelfReviewReturnHttp403() throws Exception {
+        var sample=research.upload(patient.getId(),token(patient),body());var unrelated=user("THERAPIST");
+        grant(unrelated,true,true,false); // A research grant never grants an unrelated patient relationship.
+        mvc.perform(get("/api/ml-research/samples/{id}",sample.id()).header("X-User-Id",unrelated.getId())
+            .header("X-Custom-Exercise-Token",token(unrelated))).andExpect(status().isForbidden());
+        mvc.perform(put("/api/ml-research/samples/{id}/label",sample.id()).header("X-User-Id",unrelated.getId())
+            .header("X-Custom-Exercise-Token",token(unrelated)).contentType("application/json").content(labelRequest(0).toString())).andExpect(status().isForbidden());
+        grant(author,true,true,false);
+        research.label(author.getId(),token(author),sample.id(),"insufficient_range","test draft","body-attempt-label-v1",ResearchBodyAttemptValidator.DEFINITION,0);
+        research.submitLabel(author.getId(),token(author),sample.id(),1);
+        mvc.perform(post("/api/ml-research/samples/{id}/label/review",sample.id()).header("X-User-Id",author.getId())
+            .header("X-Custom-Exercise-Token",token(author)).contentType("application/json").content("{\"decision\":\"APPROVE\",\"expectedRevision\":2}")).andExpect(status().isForbidden());
     }
     @Test void concurrentRetryAndFirstDraftAreSerialized() throws Exception {
         // Only this test commits ephemeral fixtures, then cleans exact generated IDs.
@@ -165,6 +259,10 @@ class BodyRound3MySqlIntegrationTest {
         research.submitLabel(author.getId(),token(author),id,1);
         research.reviewLabel(reviewer.getId(),token(reviewer),id,decision,"synthetic reason","LOW_QUALITY",2);
     }
+    ObjectNode labelRequest(int revision) {
+        return mapper.createObjectNode().put("label","insufficient_range").put("note","synthetic draft")
+            .put("labelVersion","body-attempt-label-v1").put("actionDefinitionVersion",ResearchBodyAttemptValidator.DEFINITION).put("expectedRevision",revision);
+    }
     ObjectNode body() {
         var n=ResearchBodyAttemptTest.fixture();n.put("sampleId",UUID.randomUUID().toString());n.put("attemptId",UUID.randomUUID().toString());
         n.put("sessionId",UUID.randomUUID().toString());n.put("exerciseId",exercise.getId().toString());return n;
@@ -185,7 +283,7 @@ class BodyRound3MySqlIntegrationTest {
     }
     User user(String role) {var u=new User();u.setEmail("round3_"+UUID.randomUUID()+"@example.invalid");u.setName("虛構驗證帳號");u.setRole(role);return users.saveAndFlush(u);}
     String token(User user){return identity.issueToken(user);}
-    void grant(User u,boolean a,boolean r,boolean m) {var g=new ResearchGrantEntity();g.setUserId(u.getId());g.setStudyId(ResearchAuthorityService.STUDY_ID);
+    void grant(User u,boolean a,boolean r,boolean m) {var g=grants.findByUserIdAndStudyId(u.getId(),ResearchAuthorityService.STUDY_ID).orElseGet(ResearchGrantEntity::new);g.setUserId(u.getId());g.setStudyId(ResearchAuthorityService.STUDY_ID);
         g.setCanAnnotate(a);g.setCanReview(r);g.setCanManage(m);g.setUpdatedAt(Instant.now());grants.saveAndFlush(g);}
     String entry(byte[] bytes,String name) throws Exception {try(var zip=new ZipInputStream(new ByteArrayInputStream(bytes))) {
         for(var e=zip.getNextEntry();e!=null;e=zip.getNextEntry())if(e.getName().equals(name))return new String(zip.readAllBytes(),StandardCharsets.UTF_8);

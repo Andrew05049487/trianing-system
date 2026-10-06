@@ -1,12 +1,12 @@
 # Body Research Round 3 Backend Checkpoint / Handoff
 
-Status: PARTIAL. Implementation/mock tests complete; owner V005 application and actual
-isolated MySQL/Hibernate/API/concurrency acceptance pending. Do not start Round 4.
+Status: PARTIAL. Implementation/mock tests and local isolated V005/MySQL/Hibernate/API/concurrency
+acceptance PASS. Pi/TV hardware E2E and release runtime remain pending. Do not start Round 4.
 
 ## Environment separation (2026-10-06)
 
 - Local Windows MySQL 8.4.11, rehab_body_r3_validation: V001-V004 migration and actual metadata PASS (29 tables/253 columns).
-- V005: owner says not yet run; read-only verification found 0/4 added columns. Hibernate/CRUD/concurrency NOT RUN.
+- V005: subsequently applied by owner. Current actual metadata PASS: 29 tables/257 columns/34 FK; Hibernate/CRUD/concurrency PASS. Earlier pending status is historical, not current.
 - Laboratory MySQL: NOT RUN / NOT VALIDATED. It is the actual future project database, not this local validation schema. Do not connect without explicit access/authorization.
 - Production / Render: NOT DEPLOYED; no settings, collection flags or data changed.
 
@@ -16,7 +16,7 @@ isolated MySQL/Hibernate/API/concurrency acceptance pending. Do not start Round 
 - Existing endpoints reused. Review decision APPROVE/RETURN/REJECT/NEEDS_RESAMPLE, reasonCode and expectedRevision are additive request fields.
 - APPROVE -> APPROVED/ACTIVE; RETURN -> RETURNED/ACTIVE; REJECT -> RETURNED/REJECTED; NEEDS_RESAMPLE -> RETURNED/NEEDS_RESAMPLE.
 - Nonapprove note mandatory; rejection/resample reason mandatory. Approved or non-ACTIVE edits locked; independent reviewer/grants/binding remain required.
-- v3 upload consent-row write lock and READ_COMMITTED serialize retries; v3 edits lock sample before first annotation insert. Actual races NOT RUN.
+- v3 upload consent-row write lock and READ_COMMITTED serialize retries; v3 edits lock sample before first annotation insert. Actual local MySQL races PASS.
 - Optional resampleOfSampleId links an immutable existing NEEDS_RESAMPLE parent with matching owner, exercise/type, current subject and unexpired consent context; new payload/attempt ID required.
 - Export v3 requires explicit phone or tv_pi source. Only independently approved/ACTIVE/current-consent/nonexpired/non-DEMO/valid features and trainable labels included. Invalid JSON skipped. Hand/body/legacy schemas not pooled.
 - Export manifest includes versions, source and pseudonymous subject/session/attempt grouping; direct IDs/auth/name/email omitted. Existing 500 approved-candidate/20MB bounds retained.
@@ -26,7 +26,7 @@ isolated MySQL/Hibernate/API/concurrency acceptance pending. Do not start Round 
 - V001-V003 unchanged.
 - V004 development-only disposition CHECK adds REJECTED, already present in owner's local setup. Do not replay.
 - V005__body_review_resample.sql: sample resample_of_sample_id VARCHAR(36) nullable/self FK ON DELETE SET NULL/index; annotation reason_code VARCHAR(64); revision reason_code VARCHAR(64) and disposition VARCHAR(32), nullable.
-- Expected after V005: 29 tables/257 columns/34 FK. These are expectations, not actual measured results.
+- Measured after owner V005: MySQL 8.4.11, 29 tables/257 columns/34 FK. No migration replayed by agent.
 - Application remains ddl-auto=validate. No Hibernate update/create fallback.
 
 ## Tests actually executed
@@ -40,13 +40,20 @@ isolated MySQL/Hibernate/API/concurrency acceptance pending. Do not start Round 
 - Evidence: target/body-r3-full-maven.log, target/body-r3-package.log, target/surefire-reports/*.xml.
 - H2 chat results are not MySQL evidence; no model training/clinical accuracy claimed.
 
-## Prepared real MySQL tests (NOT RUN)
+Latest continuation results: local real MySQL 12/12 PASS, no skips. Full Maven regression
+331 discovered/298 PASS/33 skipped/zero failures; package PASS. Full run intentionally has no DB_URL;
+10 Body test methods skipped in that run, 12 invocations exercised in the separate actual MySQL run.
+Earlier 328/298/30 results retained above as history. Detailed matrix: docs/BODY_RESEARCH_ROUND3_MYSQL_VALIDATION.md.
 
-BodyRound3MySqlIntegrationTest has seven cases: metadata/normal collection closed,
+## Real MySQL tests (PASS locally)
+
+BodyRound3MySqlIntegrationTest originally had seven cases; expanded twelve actual invocations now PASS: metadata/normal collection closed,
 idempotency/conflict/unique attempt, v1 body/v2 hand nullable compatibility,
 authenticated upload->independent review->source-specific export,
 immutable linked resample lifecycle, revoked/unrelated authorization, concurrent retry/first draft.
-Six rollback. One commits ephemeral synthetic fixtures, then finally cleans only its generated IDs.
+Transactional cases rollback. One commits ephemeral synthetic fixtures, then finally cleans only its generated IDs.
+Explicit HTTP 403/409, label/review/export routes, revision/audit SQL reads, legacy/current CRUD and all review dispositions added.
+All 29 tables have exact zero row counts after tests. No clearing/recreation or auto-increment reset.
 Test-only primary synthetic service permits fake data; normal service remains collection-disabled.
 No table clear, production consent, manager bootstrap or formal retention policy.
 
@@ -75,21 +82,18 @@ No table clear, production consent, manager bootstrap or formal retention policy
 - tools/body-round3-mysql-test.ps1 (new)
 - docs/BODY_RESEARCH_ROUND3_PROGRESS.md (new)
 - docs/BODY_RESEARCH_ROUND3_REPORT.md (new)
+- docs/BODY_RESEARCH_ROUND3_MYSQL_VALIDATION.md (new continuation evidence)
 
 ## Safe continuation commands
 
-Run in local PowerShell only (root password solely in the MySQL interactive prompt):
-
-    & 'C:\Users\kuoja\Documents\GitHub\trianing-system\tools\body-round3-review-migration.ps1'
-
-After owner confirms success:
+Owner V005 is already complete; do not rerun any migrations/setup. To reproduce validation in local PowerShell:
 
     & 'C:\Users\kuoja\Documents\GitHub\trianing-system\tools\body-round3-mysql-test.ps1'
 
 Runner forces localhost/rehab_body_r3_validation and 4/4-column preflight, imports existing
 DPAPI app CRUD credential, generates temporary test secrets in process environment without printing,
 restores previous environment in finally. No migrations run by test runner.
-Capture measured schema/Hibernate/API/concurrency results and verify fixture cleanup.
+Measured schema/Hibernate/API/concurrency and fixture cleanup now PASS; runner safely reproduces the same tests.
 If failures occur, fix the actual cause; never weaken assertions or enable Hibernate update.
 
 ## Branch / compatibility checkpoint
