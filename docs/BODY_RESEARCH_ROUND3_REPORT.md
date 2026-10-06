@@ -99,6 +99,9 @@ Flutter master 3e6d013184104898596e82e2a580006145c1b05d;
 TV 2a0b10b95e95b5e7c29ff41f2815c258bf26d84d. Compatible Round 3 code committed locally in
 each existing branch; actual SHA obtained with git rev-parse HEAD/final report.
 No new branches, whole-branch merges, push or deployment.
+Verified Round 3 implementation checkpoints: backend main 6048bf32e6bccb6ae694297e68a57a600d41157b;
+master 1326472811298223182d009c252645e1da5a9610; TV 968d8a4be92c4a9696db7944001b4d187ce33ad4.
+Subsequent documentation-only commit records these checkpoints; final HEAD is reported separately.
 Complete twenty-section cross-repository report is Flutter docs/BODY_RESEARCH_ROUND3_REPORT.md.
 Phone/TV Debug and Release PASS; master focused 61/61, TV 35/35, scoped analyze zero issues.
 Full Flutter 545 PASS/7 inherited FAIL explicitly preserved. Pi/TV camera E2E and release runtime NOT RUN.
