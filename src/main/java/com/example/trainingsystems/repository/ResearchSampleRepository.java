@@ -15,6 +15,9 @@ import java.util.Optional;
 import java.time.Instant;
 
 public interface ResearchSampleRepository extends JpaRepository<ResearchSampleEntity, String> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from ResearchSampleEntity s where s.id=:id")
+    Optional<ResearchSampleEntity> findForUpdate(@Param("id") String id);
     Optional<ResearchSampleEntity> findByParticipantUserIdAndClientSampleId(Long participantUserId, String clientSampleId);
     Optional<ResearchSampleEntity> findByParticipantUserIdAndAttemptId(Long participantUserId, String attemptId);
     Page<ResearchSampleEntity> findByParticipantUserId(Long participantUserId, Pageable pageable);

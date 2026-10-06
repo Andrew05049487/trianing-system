@@ -120,17 +120,18 @@ public class ResearchDataService {
         return consentView(consent);
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public SampleView upload(Long userId, String token, JsonNode payload) {
         requireRole(userId, token, PATIENT);
         requireCollectionEnabled();
-        ResearchConsentEntity consent = consents.findById(userId)
+        // Serialize v3 retries before duplicate lookup using the existing consent row.
+        boolean bodyAttempt = payload != null && payload.path("schemaVersion").asInt(-1)==3;
+        ResearchConsentEntity consent = (bodyAttempt ? consents.findForUpload(userId) : consents.findById(userId))
             .orElseThrow(() -> forbidden("RESEARCH_CONSENT_REQUIRED"));
         if (!consent.isActive() || !currentConsentVersion.equals(consent.getConsentVersion())) {
             throw forbidden("RESEARCH_CONSENT_REQUIRED");
         }
         ResearchSampleValidator.ValidatedSample validated = validator.validate(payload);
-        boolean bodyAttempt = payload.path("schemaVersion").asInt(-1)==3;
         if (bodyAttempt) bodyAssignments.requireAssigned(userId, validated.safePayload());
         if (payload.path("schemaVersion").asInt(-1) == 2 &&
             (handConsentVersion.isBlank() || !handConsentVersion.equals(currentConsentVersion) ||
@@ -169,6 +170,20 @@ public class ResearchDataService {
         sample.setExpiresAt(sample.getUploadedAt().plusSeconds(policy.getRetentionDays() * 86400L));
         sample.setMovementSide(validated.side());
         sample.setCameraView(validated.cameraView());
+        String resampleOf = validated.safePayload().path("resampleOfSampleId").asText(null);
+        if (resampleOf != null) {
+            ResearchSampleEntity parent = findSample(resampleOf);
+            if (!userId.equals(parent.getParticipantUserId()) ||
+                !"NEEDS_RESAMPLE".equals(parent.getDisposition()) ||
+                !Integer.valueOf(3).equals(parent.getSchemaVersion()) ||
+                !validated.safePayload().path("exerciseId").asText().equals(parent.getExerciseId()) ||
+                !validated.safePayload().path("exerciseType").asText().equals(parent.getExerciseType()) ||
+                !consent.getSubjectId().equals(parent.getSubjectId()) ||
+                parent.getExpiresAt()==null || !parent.getExpiresAt().isAfter(Instant.now())) {
+                throw forbidden("INVALID_RESAMPLE_CONTEXT");
+            }
+            sample.setResampleOfSampleId(parent.getId());
+        }
         if (bodyAttempt) {
             var v3=validated.safePayload();
             sample.setModality("body");sample.setSource(v3.path("source").asText());
@@ -231,19 +246,30 @@ public class ResearchDataService {
     public AnnotationView label(Long userId, String token, String sampleId,
                                 String label, String note, String labelVersion,
                                 String actionDefinitionVersion) {
+        return label(userId,token,sampleId,label,note,labelVersion,actionDefinitionVersion,null);
+    }
+
+    @Transactional
+    public AnnotationView label(Long userId, String token, String sampleId,
+                                String label, String note, String labelVersion,
+                                String actionDefinitionVersion, Integer expectedRevision) {
         User therapist = requireRole(userId, token, THERAPIST);
         authority.requireAnnotator(therapist);
         ResearchSampleEntity sample = findSample(sampleId);
         requireAccess(therapist, sample);
+        sample = lockBodySample(sample);
         var definition = sampleDefinition(sample);
         if (definition == null || !definition.labels().contains(label) ||
             labelVersion == null || !labelVersion.matches("[A-Za-z0-9_.-]{1,64}") ||
             (definition.schemaVersion() == 2 && !"hand-research-v1".equals(labelVersion)) ||
+            (definition.schemaVersion() == 3 && !"body-attempt-label-v1".equals(labelVersion)) ||
             actionDefinitionVersion == null ||
             !definition.version().equals(actionDefinitionVersion) ||
             (note != null && note.length() > 1000)) throw badRequest("INVALID_RESEARCH_LABEL");
         ResearchAnnotationEntity annotation = annotations.findForUpdate(sampleId)
             .orElseGet(ResearchAnnotationEntity::new);
+        checkRevision(sample, annotation, expectedRevision);
+        if (!"ACTIVE".equals(sample.getDisposition())) throw conflict("RESEARCH_SAMPLE_NOT_ACTIVE");
         if (annotation.getTherapistUserId() != null &&
             !annotation.getTherapistUserId().equals(userId)) {
             throw forbidden("LABEL_OWNED_BY_OTHER_THERAPIST");
@@ -268,12 +294,20 @@ public class ResearchDataService {
 
     @Transactional
     public AnnotationView submitLabel(Long userId, String token, String sampleId) {
+        return submitLabel(userId,token,sampleId,null);
+    }
+
+    @Transactional
+    public AnnotationView submitLabel(Long userId, String token, String sampleId, Integer expectedRevision) {
         User annotator = requireRole(userId, token, THERAPIST);
         authority.requireAnnotator(annotator);
         ResearchSampleEntity sample = findSample(sampleId);
         requireAccess(annotator, sample);
+        sample = lockBodySample(sample);
         ResearchAnnotationEntity annotation = annotations.findForUpdate(sampleId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RESEARCH_LABEL_NOT_FOUND"));
+        checkRevision(sample, annotation, expectedRevision);
+        if (!"ACTIVE".equals(sample.getDisposition())) throw conflict("RESEARCH_SAMPLE_NOT_ACTIVE");
         if (!userId.equals(annotation.getTherapistUserId())) throw forbidden("LABEL_OWNED_BY_OTHER_THERAPIST");
         if (!"DRAFT".equals(annotation.getStatus()) && !"RETURNED".equals(annotation.getStatus()) &&
             !"LABELED".equals(annotation.getStatus())) throw conflict("RESEARCH_LABEL_NOT_EDITABLE");
@@ -309,25 +343,46 @@ public class ResearchDataService {
     @Transactional
     public AnnotationView reviewLabel(Long userId, String token, String sampleId,
                                       boolean approve, String reviewNote) {
+        return reviewLabel(userId,token,sampleId,approve?"APPROVE":"RETURN",reviewNote,null,null);
+    }
+
+    @Transactional
+    public AnnotationView reviewLabel(Long userId, String token, String sampleId,
+                                      String decision, String reviewNote,
+                                      String reasonCode, Integer expectedRevision) {
         User reviewer = requireRole(userId, token, THERAPIST);
         authority.requireReviewer(reviewer);
         ResearchSampleEntity sample = findSample(sampleId);
         requireAccess(reviewer, sample);
+        sample = lockBodySample(sample);
         ResearchAnnotationEntity annotation = annotations.findForUpdate(sampleId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RESEARCH_LABEL_NOT_FOUND"));
         if (!"SUBMITTED".equals(annotation.getStatus())) throw conflict("RESEARCH_LABEL_NOT_SUBMITTED");
         if (userId.equals(annotation.getTherapistUserId())) throw forbidden("RESEARCH_SELF_REVIEW_DENIED");
+        checkRevision(sample, annotation, expectedRevision);
+        if (decision==null || !Set.of("APPROVE","RETURN","REJECT","NEEDS_RESAMPLE").contains(decision)) throw badRequest("INVALID_REVIEW_DECISION");
+        boolean approve = "APPROVE".equals(decision);
+        if (!approve && reasonCode != null &&
+            !Set.of("TRACKING_LOST","LOW_QUALITY","INCOMPLETE_MOTION","WRONG_ACTION","OTHER").contains(reasonCode)) throw badRequest("INVALID_REVIEW_REASON");
+        if (Set.of("REJECT","NEEDS_RESAMPLE").contains(decision) && reasonCode==null) throw badRequest("REVIEW_REASON_REQUIRED");
         if (reviewNote != null && reviewNote.length() > 1000) throw badRequest("INVALID_REVIEW_NOTE");
         if (!approve && (reviewNote == null || reviewNote.isBlank())) throw badRequest("REVIEW_REASON_REQUIRED");
         annotation.setStatus(approve ? "APPROVED" : "RETURNED");
         annotation.setReviewerUserId(userId);
         annotation.setReviewedAt(Instant.now());
         annotation.setReviewNote(reviewNote == null ? "" : reviewNote.trim());
+        annotation.setReasonCode(approve?null:(reasonCode==null?"OTHER":reasonCode));
+        sample.setDisposition(switch(decision) {
+            case "REJECT" -> "REJECTED";
+            case "NEEDS_RESAMPLE" -> "NEEDS_RESAMPLE";
+            default -> "ACTIVE";
+        });
+        samples.save(sample);
         annotation.setUpdatedAt(Instant.now());
         annotation.setRevision(annotation.getRevision() + 1);
         annotations.save(annotation);
         snapshot(annotation, userId);
-        audit(userId, approve ? "LABEL_APPROVED" : "LABEL_RETURNED", sampleId);
+        audit(userId, "LABEL_" + (approve?"APPROVED":decision), sampleId);
         return annotationView(annotation);
     }
 
@@ -406,6 +461,15 @@ public class ResearchDataService {
         }
     }
 
+    private ResearchSampleEntity lockBodySample(ResearchSampleEntity sample) {
+        // A sample row exists even for the first draft: serialize before inserting
+        // a missing annotation so concurrent editors get revision 409, not PK 500.
+        return Integer.valueOf(3).equals(sample.getSchemaVersion())
+            ? samples.findForUpdate(sample.getId()).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "RESEARCH_SAMPLE_NOT_FOUND"))
+            : sample;
+    }
+
     private ResearchSampleEntity findSample(String id) {
         return samples.findById(id).orElseThrow(() ->
             new ResponseStatusException(HttpStatus.NOT_FOUND, "RESEARCH_SAMPLE_NOT_FOUND"));
@@ -421,7 +485,9 @@ public class ResearchDataService {
             definition == null ? null : definition.schemaVersion(),
             definition == null ? null : definition.version(),
             sample.getModality(),sample.getSource(),sample.getSessionId(),sample.getAttemptId(),
-            sample.getExerciseType(),sample.getExerciseId(),sample.getDisposition());
+            sample.getExerciseType(),sample.getExerciseId(),sample.getDisposition(),
+            sample.getResampleOfSampleId(),
+            annotation==null?null:annotation.getReasonCode());
     }
 
     private ResearchActionRegistry.Definition sampleDefinition(ResearchSampleEntity sample) {
@@ -435,7 +501,8 @@ public class ResearchDataService {
             annotation.getLabelVersion(), annotation.getActionDefinitionVersion(),
             annotation.getStatus(), annotation.getUpdatedAt(), annotation.getRevision(),
             annotation.getTherapistUserId(), annotation.getSubmittedAt(),
-            annotation.getReviewerUserId(), annotation.getReviewedAt(), annotation.getReviewNote());
+            annotation.getReviewerUserId(), annotation.getReviewedAt(), annotation.getReviewNote(),
+            annotation.getReasonCode());
     }
 
     private void snapshot(ResearchAnnotationEntity annotation, Long actorId) {
@@ -452,6 +519,9 @@ public class ResearchDataService {
         revision.setStatus(annotation.getStatus());
         revision.setReviewerUserId(annotation.getReviewerUserId());
         revision.setReviewNote(annotation.getReviewNote());
+        revision.setReasonCode(annotation.getReasonCode());
+        revision.setDisposition(samples.findById(annotation.getSampleId())
+            .map(ResearchSampleEntity::getDisposition).orElse(null));
         revision.setCreatedAt(Instant.now());
         revisions.save(revision);
     }
@@ -501,6 +571,11 @@ public class ResearchDataService {
         return new ResponseStatusException(HttpStatus.CONFLICT, code);
     }
 
+    private static void checkRevision(ResearchSampleEntity sample, ResearchAnnotationEntity annotation, Integer expected) {
+        if ((Integer.valueOf(3).equals(sample.getSchemaVersion()) && expected==null) ||
+            (expected!=null && expected!=annotation.getRevision())) throw conflict("RESEARCH_STALE_REVISION");
+    }
+
     public record ConsentView(boolean active, String subjectId, String consentVersion,
                               String currentVersion, boolean available, String unavailableReason, boolean handAvailable) {}
     public record SampleView(String id, String clientSampleId, String subjectId,
@@ -508,10 +583,11 @@ public class ResearchDataService {
                              String annotationStatus, String actionId, Integer schemaVersion,
                              String actionDefinitionVersion, String modality, String source,
                              String sessionId, String attemptId, String exerciseType,
-                             String exerciseId, String disposition) {}
+                             String exerciseId, String disposition, String resampleOfSampleId,
+                             String reasonCode) {}
     public record AnnotationView(String label, String note, String labelVersion,
                                  String actionDefinitionVersion, String status, Instant updatedAt,
                                  int revision, Long annotatorUserId, Instant submittedAt,
-                                 Long reviewerUserId, Instant reviewedAt, String reviewNote) {}
+                                 Long reviewerUserId, Instant reviewedAt, String reviewNote, String reasonCode) {}
     public record SampleDetail(SampleView sample, JsonNode payload, AnnotationView annotation) {}
 }

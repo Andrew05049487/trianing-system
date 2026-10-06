@@ -21,7 +21,7 @@ ALTER TABLE research_samples
       AND attempt_id IS NOT NULL AND exercise_type IS NOT NULL AND exercise_type IN ('DEFAULT','CUSTOM')
       AND exercise_id IS NOT NULL)),
   ADD CONSTRAINT chk_research_sample_disposition CHECK (
-    disposition IN ('ACTIVE','EXCLUDED','NEEDS_RESAMPLE'));
+    disposition IN ('ACTIVE','EXCLUDED','REJECTED','NEEDS_RESAMPLE'));
 
 -- Version context for future reviewer/audit consumers; no review-flow rewrite.
 ALTER TABLE research_annotations ADD COLUMN schema_version INT NULL;

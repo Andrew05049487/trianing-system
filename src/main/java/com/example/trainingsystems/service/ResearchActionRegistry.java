@@ -66,7 +66,7 @@ public final class ResearchActionRegistry {
     public static final Definition BODY_ATTEMPT = new Definition(STANDING,3,
         ResearchBodyAttemptValidator.DEFINITION,STANDING_DEFINITION.featureNames(),
         STANDING_DEFINITION.angles(),STANDING_DEFINITION.leftRequired(),STANDING_DEFINITION.rightRequired(),4,
-        STANDING_DEFINITION.labels(),Set.of(),false,ignored -> null);
+        STANDING_DEFINITION.labels(),STANDING_DEFINITION.trainableLabels(),false,ignored -> null);
     public Definition forSample(JsonNode sample) {
         if (sample == null) return null;
         if (sample.path("schemaVersion").asInt(-1)==3 && STANDING.equals(sample.path("actionId").asText())) {

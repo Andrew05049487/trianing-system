@@ -31,11 +31,13 @@ public class ResearchManagementController {
     public ResponseEntity<byte[]> export(
         @RequestHeader(value = "X-User-Id", required = false) Long id,
         @RequestHeader(value = "X-Custom-Exercise-Token", required = false) String token,
-        @RequestParam(defaultValue = "standing_knee_raise") String actionId) {
+        @RequestParam(defaultValue = "standing_knee_raise") String actionId,
+        @RequestParam(defaultValue = "1") int schemaVersion,
+        @RequestParam(required=false) String source) {
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType("application/zip"))
             .cacheControl(CacheControl.noStore())
             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=rehab-research-reviewed.zip")
-            .body(service.exportApproved(id, token, actionId));
+            .body(service.exportApproved(id, token, actionId, schemaVersion, source));
     }
 }

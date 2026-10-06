@@ -13,6 +13,11 @@ public class ResearchTrainingFeatureValidator {
     public ResearchTrainingFeatureValidator(ResearchActionRegistry actions) { this.actions = actions; }
     public boolean matches(JsonNode sample) {
         try {
+            if (sample.path("schemaVersion").asInt(-1)==3) {
+                var safe=new ResearchBodyAttemptValidator(new com.fasterxml.jackson.databind.ObjectMapper())
+                    .validate(sample,false).safePayload();
+                return "available".equals(safe.path("featuresStatus").asText());
+            }
             var definition = actions.forSample(sample);
             if (definition == null) return false;
             JsonNode names = sample.path("featureNames");

@@ -109,7 +109,7 @@ class ResearchBodyAttemptTest {
         var user=new User();user.setId(1L);user.setRole("PATIENT");when(users.findById(1L)).thenReturn(Optional.of(user));
         when(identity.isConfigured()).thenReturn(true);when(identity.isValid(user,"test-token")).thenReturn(true);
         var consent=new ResearchConsentEntity();consent.setActive(true);consent.setConsentVersion("test-v1");consent.setSubjectId("server-subject");
-        when(consents.findById(1L)).thenReturn(Optional.of(consent));
+        when(consents.findForUpload(1L)).thenReturn(Optional.of(consent));
         var policy=new ResearchRetentionPolicyEntity();policy.setPolicyVersion("test-policy");policy.setRetentionDays(1);when(retention.currentPolicy()).thenReturn(Optional.of(policy));
         var saved=new ArrayList<ResearchSampleEntity>();when(samples.saveAndFlush(any())).thenAnswer(i->{saved.add(i.getArgument(0));return i.getArgument(0);});
         var p=fixture();var first=service.upload(1L,"test-token",p);

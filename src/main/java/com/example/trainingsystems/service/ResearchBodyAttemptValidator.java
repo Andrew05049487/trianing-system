@@ -11,12 +11,14 @@ import java.util.*;
 /** Versioned image-plane geometry only. SimCC scores are not probabilities. */
 public final class ResearchBodyAttemptValidator {
     public static final String DEFINITION="standing-knee-raise-body-v2", EXTRACTOR="standing-knee-raise-aspect-2d-v2", INPUT="body-attempt-features-v1", SCORES="simcc_peak_mean_uncalibrated";
-    private static final Set<String> ROOT=Set.of("sampleId","subjectId","sessionId","attemptId","schemaVersion","modality","source","platform","exerciseType","exerciseId","actionId","actionDefinitionVersion","extractorVersion","modelInputVersion","poseModelVersion","coordinateTransformVersion","streamSessionId","frameId","timestampOrigin","movementSide","cameraView","capturedAt","featureNames","features","featuresStatus","duration","terminationReason","setIndex","completedRepsBefore","completedRepsAfter","intendedRepetition","trackingQuality","frames");
+    private static final Set<String> ROOT=Set.of("sampleId","subjectId","sessionId","attemptId","schemaVersion","modality","source","platform","exerciseType","exerciseId","actionId","actionDefinitionVersion","extractorVersion","modelInputVersion","poseModelVersion","coordinateTransformVersion","streamSessionId","frameId","timestampOrigin","movementSide","cameraView","capturedAt","featureNames","features","featuresStatus","duration","terminationReason","setIndex","completedRepsBefore","completedRepsAfter","intendedRepetition","trackingQuality","frames","resampleOfSampleId");
     private static final Set<String> FRAME=Set.of("frameId","streamSessionId","timestampMs","timestampOrigin","captureTimestamp","imageWidth","imageHeight","source","poseModelVersion","coordinateTransformVersion","mirrored","rotationDegrees","scoreSemantics","keypoints","scores","validity","angles");
     private final ObjectMapper mapper;
     public ResearchBodyAttemptValidator(ObjectMapper mapper){this.mapper=mapper;}
     public ResearchSampleValidator.ValidatedSample validate(JsonNode n,boolean recent){
         only(n,ROOT);
+        if (n.has("resampleOfSampleId") && !n.get("resampleOfSampleId").isNull() &&
+            !text(n,"resampleOfSampleId").matches("[0-9a-fA-F-]{36}")) fail();
         if(n.path("schemaVersion").asInt(-1)!=3 || !"body".equals(text(n,"modality")) || !"standing_knee_raise".equals(text(n,"actionId")) || !DEFINITION.equals(text(n,"actionDefinitionVersion")) || !EXTRACTOR.equals(text(n,"extractorVersion")) || !INPUT.equals(text(n,"modelInputVersion"))) fail();
         choice(n,"source","phone","tv_pi");choice(n,"platform","android_phone","android_tv");choice(n,"exerciseType","DEFAULT","CUSTOM");choice(n,"movementSide","left","right");choice(n,"cameraView","front","rear");choice(n,"timestampOrigin","tv_receive_monotonic","phone_receive_monotonic");
         if("tv_pi".equals(text(n,"source")) && (!"android_tv".equals(text(n,"platform")) || !"tv_receive_monotonic".equals(text(n,"timestampOrigin")))) fail();

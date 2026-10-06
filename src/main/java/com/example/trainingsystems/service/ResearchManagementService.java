@@ -78,8 +78,19 @@ public class ResearchManagementService {
 
     @Transactional
     public byte[] exportApproved(Long userId, String token, String actionId) {
+        return exportApproved(userId,token,actionId,1,null);
+    }
+
+    @Transactional
+    public byte[] exportApproved(Long userId, String token, String actionId, int schemaVersion, String source) {
         authority.requireManager(authority.authenticated(userId, token));
-        var definition = validator.action(actionId);
+        if (!java.util.Set.of(1,2,3).contains(schemaVersion)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"UNSUPPORTED_RESEARCH_SCHEMA");
+        boolean bodyAttempt=schemaVersion==3;
+        if (bodyAttempt && (!ResearchActionRegistry.STANDING.equals(actionId) ||
+            source==null || !java.util.Set.of("phone","tv_pi").contains(source))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"BODY_EXPORT_SOURCE_REQUIRED");
+        }
+        var definition = bodyAttempt?ResearchActionRegistry.BODY_ATTEMPT:validator.action(actionId);
         if (definition == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
             "UNSUPPORTED_RESEARCH_ACTION");
         if (consentVersion.isBlank()) throw new ResponseStatusException(
@@ -93,6 +104,8 @@ public class ResearchManagementService {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         StringBuilder labels = new StringBuilder("sampleId,label,annotatorId,labelVersion,actionDefinitionVersion\n");
         Map<Long, String> aliases = new HashMap<>();
+        Map<String,String> sessionAliases=new HashMap<>();
+        var groups=mapper.createArrayNode();
         int count = 0;
         int uncompressed = 0;
         try (ZipOutputStream zip = new ZipOutputStream(bytes, StandardCharsets.UTF_8)) {
@@ -101,6 +114,7 @@ public class ResearchManagementService {
                     annotation.getReviewerUserId().equals(annotation.getTherapistUserId())) continue;
                 ResearchSampleEntity sample = samples.findById(annotation.getSampleId()).orElse(null);
                 if (sample == null) continue;
+                if (!"ACTIVE".equals(sample.getDisposition())) continue;
                 // Synthetic demos are never a formal training export, even on a non-demo server.
                 if (String.valueOf(sample.getClientSampleId()).startsWith("DEMO-") ||
                     String.valueOf(sample.getSubjectId()).startsWith("DEV-SUBJECT-") ||
@@ -110,18 +124,33 @@ public class ResearchManagementService {
                 if (consent == null || !consent.isActive() ||
                     !consentVersion.equals(consent.getConsentVersion()) ||
                     !sample.getSubjectId().equals(consent.getSubjectId())) continue;
-                JsonNode stored = mapper.readTree(sample.getPayloadJson());
                 // Re-sanitize before export; never pass through unknown/direct identifiers.
-                ObjectNode safe = validator.validateStored(stored).safePayload();
+                ObjectNode safe;
+                try { safe = validator.validateStored(mapper.readTree(sample.getPayloadJson())).safePayload(); }
+                catch (ResponseStatusException | JsonProcessingException invalid) { continue; }
+                if (bodyAttempt && (!source.equals(safe.path("source").asText()) ||
+                    safe.path("schemaVersion").asInt(-1)!=3)) continue;
                 if (!definition.actionId().equals(safe.path("actionId").asText()) ||
                     !definition.acceptsVersion(safe) ||
                     !definition.version().equals(annotation.getActionDefinitionVersion()) ||
                     (definition.schemaVersion() == 2 && !"hand-research-v1".equals(annotation.getLabelVersion())) ||
+                    (bodyAttempt && !"body-attempt-label-v1".equals(annotation.getLabelVersion())) ||
                     !definition.trainableLabels().contains(annotation.getLabel())) continue;
                 safe.put("actionDefinitionVersion", definition.version());
                 safe.put("sampleId", sample.getId());
                 safe.put("subjectId", sample.getSubjectId());
                 if (!trainingFeatures.matches(safe)) continue;
+                if (bodyAttempt) {
+                    String sessionGroup=sessionAliases.computeIfAbsent(sample.getSubjectId()+"|"+safe.path("sessionId").asText(),
+                        ignored -> "session_"+(sessionAliases.size()+1));
+                    String attemptGroup="attempt_"+(count+1);
+                    safe.put("sessionId",sessionGroup);safe.put("attemptId",attemptGroup);
+                    safe.remove("resampleOfSampleId");
+                    var group=groups.addObject();
+                    group.put("sampleId",sample.getId());group.put("subjectPseudonym",sample.getSubjectId());
+                    group.put("sessionGrouping",sessionGroup);group.put("attemptGrouping",attemptGroup);
+                    group.put("source",source);
+                }
                 byte[] body = mapper.writeValueAsBytes(safe);
                 uncompressed += body.length;
                 if (uncompressed > MAX_UNCOMPRESSED_BYTES) throw new ResponseStatusException(
@@ -144,6 +173,14 @@ public class ResearchManagementService {
             manifest.put("schemaVersion", definition.schemaVersion());
             manifest.put("actionId", definition.actionId());
             manifest.put("actionDefinitionVersion", definition.version());
+            if (bodyAttempt) {
+                manifest.put("modality","body");manifest.put("source",source);
+                manifest.put("extractorVersion",ResearchBodyAttemptValidator.EXTRACTOR);
+                manifest.put("modelInputVersion",ResearchBodyAttemptValidator.INPUT);
+                manifest.put("poseModelVersion","rtmpose-wholebody-133-v1");
+                manifest.set("groups",groups);
+                manifest.put("distributionPolicy","single-source-domain; no implicit phone/tv_pi pooling");
+            }
             manifest.set("featureNames", mapper.valueToTree(definition.featureNames()));
             manifest.put("sampleCount", count);
             manifest.put("exportedAt", Instant.now().toString());

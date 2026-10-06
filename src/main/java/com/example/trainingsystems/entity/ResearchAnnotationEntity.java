@@ -14,6 +14,8 @@ import java.time.Instant;
 public class ResearchAnnotationEntity {
     @Column(name = "schema_version")
     private Integer schemaVersion;
+    @Column(name="reason_code", length=64)
+    private String reasonCode;
 
     @Id
     @Column(name = "sample_id", length = 36)

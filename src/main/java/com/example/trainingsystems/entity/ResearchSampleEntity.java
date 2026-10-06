@@ -64,4 +64,5 @@ public class ResearchSampleEntity {
     @Column(name="exercise_type", length=16) private String exerciseType;
     @Column(name="exercise_id", length=100) private String exerciseId;
     @Column(name="disposition", nullable=false, length=32) private String disposition="ACTIVE";
+    @Column(name="resample_of_sample_id", length=36) private String resampleOfSampleId;
 }

@@ -17,6 +17,10 @@ import java.time.Instant;
 public class ResearchAnnotationRevisionEntity {
     @Column(name = "schema_version")
     private Integer schemaVersion;
+    @Column(name="reason_code", length=64)
+    private String reasonCode;
+    @Column(name="disposition", length=32)
+    private String disposition;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

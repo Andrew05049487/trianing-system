@@ -69,15 +69,16 @@ public class ResearchDataController {
         @RequestBody LabelRequest request
     ) {
         return service.label(userId, token, sampleId, request.label(), request.note(),
-            request.labelVersion(), request.actionDefinitionVersion());
+            request.labelVersion(), request.actionDefinitionVersion(), request.expectedRevision());
     }
 
     @PostMapping("/samples/{sampleId}/label/submit")
     public AnnotationView submitLabel(
         @RequestHeader(value = "X-User-Id", required = false) Long userId,
         @RequestHeader(value = "X-Custom-Exercise-Token", required = false) String token,
-        @PathVariable String sampleId
-    ) { return service.submitLabel(userId, token, sampleId); }
+        @PathVariable String sampleId,
+        @RequestBody(required=false) SubmitRequest request
+    ) { return service.submitLabel(userId, token, sampleId, request==null?null:request.expectedRevision()); }
 
     @GetMapping("/review-queue")
     public Page<SampleView> reviewQueue(
@@ -93,7 +94,9 @@ public class ResearchDataController {
         @RequestHeader(value = "X-Custom-Exercise-Token", required = false) String token,
         @PathVariable String sampleId,
         @RequestBody ReviewRequest request
-    ) { return service.reviewLabel(userId, token, sampleId, request.approve(), request.note()); }
+    ) { return service.reviewLabel(userId, token, sampleId,
+        request.decision()==null?(request.approve()?"APPROVE":"RETURN"):request.decision(),
+        request.note(),request.reasonCode(),request.expectedRevision()); }
 
     @DeleteMapping("/samples/{sampleId}")
     public ResponseEntity<Void> deleteOwnSample(
@@ -116,6 +119,8 @@ public class ResearchDataController {
 
     public record ConsentRequest(boolean agree, String version) {}
     public record LabelRequest(String label, String note, String labelVersion,
-                               String actionDefinitionVersion) {}
-    public record ReviewRequest(boolean approve, String note) {}
+                               String actionDefinitionVersion, Integer expectedRevision) {}
+    public record SubmitRequest(Integer expectedRevision) {}
+    public record ReviewRequest(boolean approve, String note, String decision,
+                                String reasonCode, Integer expectedRevision) {}
 }
