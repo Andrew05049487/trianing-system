@@ -64,6 +64,58 @@ class ResearchManagementServiceTest {
             .isInstanceOf(ResponseStatusException.class);
     }
 
+    @Test void bodyV3ExportIncludesAnonymousEligibilityAndExactPayloadHash() throws Exception {
+        when(authority.authenticated(9L,"token")).thenReturn(manager);
+        var a=approved();a.setActionDefinitionVersion(ResearchBodyAttemptValidator.DEFINITION);
+        a.setLabelVersion("body-attempt-label-v1");
+        when(annotations.findByStatus(eq("APPROVED"),any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(a)));
+        var s=sample();
+        try(var in=getClass().getResourceAsStream("/body_attempt_v3_synthetic.json")) {
+            ObjectNode payload=(ObjectNode)mapper.readTree(in);
+            payload.put("resampleOfSampleId","11111111-1111-1111-1111-111111111111");
+            s.setPayloadJson(payload.toString());
+        }
+        when(samples.findById("sample-1")).thenReturn(Optional.of(s));
+        when(consents.findById(1L)).thenReturn(Optional.of(consent(true)));
+        byte[] zip=service.exportApproved(9L,"token",ResearchActionRegistry.STANDING,3,"tv_pi");
+        String payload=entry(zip,"samples/sample-1.json");
+        var manifest=mapper.readTree(entry(zip,"manifest.json"));
+        var group=manifest.path("groups").get(0);
+        assertThat(manifest.path("exportContractVersion").asText()).isEqualTo("body-approved-export-v1");
+        assertThat(manifest.path("labelMappingVersion").asText()).isEqualTo("body-attempt-label-v1");
+        assertThat(manifest.path("professionalQualificationAttested").asBoolean()).isFalse();
+        assertThat(manifest.path("consentSnapshotOnly").asBoolean()).isTrue();
+        assertThat(group.path("payloadSha256").asText()).isEqualTo(java.util.HexFormat.of().formatHex(
+            java.security.MessageDigest.getInstance("SHA-256").digest(payload.getBytes(StandardCharsets.UTF_8))));
+        assertThat(group.path("annotationStatus").asText()).isEqualTo("APPROVED");
+        assertThat(group.path("consentActive").asBoolean()).isTrue();
+        assertThat(group.path("independentReview").asBoolean()).isTrue();
+        assertThat(group.path("expiresAt").asText()).isNotBlank();
+        assertThat(payload).contains("resampleOfSampleId").doesNotContain("synthetic-session","synthetic-attempt");
+        assertThat(manifest.toString()).doesNotContain("therapistUserId","participantUserId","reviewerUserId","email","12345");
+        verify(annotations).findByStatus(eq("APPROVED"),org.mockito.ArgumentMatchers.argThat(
+            p->p.getSort().getOrderFor("sampleId")!=null));
+    }
+
+    @Test void bodyV3UnavailableFeaturesAndWrongDomainRemainExcluded() throws Exception {
+        when(authority.authenticated(9L,"token")).thenReturn(manager);
+        var a=approved();a.setActionDefinitionVersion(ResearchBodyAttemptValidator.DEFINITION);a.setLabelVersion("body-attempt-label-v1");
+        when(annotations.findByStatus(eq("APPROVED"),any(Pageable.class))).thenReturn(new PageImpl<>(List.of(a)));
+        var s=sample();
+        try(var in=getClass().getResourceAsStream("/body_attempt_v3_synthetic.json")) {
+            s.setPayloadJson(mapper.readTree(in).toString());
+        }
+        when(samples.findById("sample-1")).thenReturn(Optional.of(s));
+        when(consents.findById(1L)).thenReturn(Optional.of(consent(true)));
+        assertThat(entry(service.exportApproved(9L,"token",ResearchActionRegistry.STANDING,3,"phone"),"manifest.json"))
+            .contains("\"sampleCount\":0");
+        ObjectNode payload=(ObjectNode)mapper.readTree(s.getPayloadJson());payload.put("featuresStatus","unavailable");
+        s.setPayloadJson(payload.toString());
+        assertThat(entry(service.exportApproved(9L,"token",ResearchActionRegistry.STANDING,3,"tv_pi"),"manifest.json"))
+            .contains("\"sampleCount\":0");
+    }
+
     @Test void handExportRequiresSeparateConsentAndIndependentApprovedReview() throws Exception {
         when(authority.authenticated(9L,"token")).thenReturn(manager);
         assertThatThrownBy(()->service.exportApproved(9L,"token","sidePinch"))

@@ -98,58 +98,70 @@ public class ResearchManagementService {
         if (definition.schemaVersion() == 2 && (handConsentVersion.isBlank() || !handConsentVersion.equals(consentVersion))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "HAND_RESEARCH_SCOPE_NOT_APPROVED");
         }
-        var page = annotations.findByStatus("APPROVED", PageRequest.of(0, MAX_SAMPLES + 1));
+        var page = annotations.findByStatus("APPROVED", PageRequest.of(0, MAX_SAMPLES + 1,
+            org.springframework.data.domain.Sort.by("sampleId")));
         if (page.getTotalElements() > MAX_SAMPLES) throw new ResponseStatusException(
             HttpStatus.PAYLOAD_TOO_LARGE, "RESEARCH_EXPORT_BATCH_TOO_LARGE");
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         StringBuilder labels = new StringBuilder("sampleId,label,annotatorId,labelVersion,actionDefinitionVersion\n");
         Map<Long, String> aliases = new HashMap<>();
+        Map<Long, String> reviewerAliases = new HashMap<>();
+        Map<String, Integer> exclusions = new java.util.TreeMap<>();
         Map<String,String> sessionAliases=new HashMap<>();
         var groups=mapper.createArrayNode();
+        Instant eligibilityCheckedAt = Instant.now();
         int count = 0;
         int uncompressed = 0;
         try (ZipOutputStream zip = new ZipOutputStream(bytes, StandardCharsets.UTF_8)) {
             for (ResearchAnnotationEntity annotation : page.getContent()) {
                 if (annotation.getReviewerUserId() == null || annotation.getReviewedAt() == null ||
-                    annotation.getReviewerUserId().equals(annotation.getTherapistUserId())) continue;
+                    annotation.getReviewerUserId().equals(annotation.getTherapistUserId())) { exclusions.merge("independent_review_missing",1,Integer::sum); continue; }
                 ResearchSampleEntity sample = samples.findById(annotation.getSampleId()).orElse(null);
-                if (sample == null) continue;
-                if (!"ACTIVE".equals(sample.getDisposition())) continue;
+                if (sample == null) { exclusions.merge("sample_missing",1,Integer::sum); continue; }
+                if (!"ACTIVE".equals(sample.getDisposition())) { exclusions.merge("disposition_not_active",1,Integer::sum); continue; }
                 // Synthetic demos are never a formal training export, even on a non-demo server.
                 if (String.valueOf(sample.getClientSampleId()).startsWith("DEMO-") ||
                     String.valueOf(sample.getSubjectId()).startsWith("DEV-SUBJECT-") ||
-                    authority.isSyntheticParticipant(sample.getParticipantUserId())) continue;
-                if (sample.getExpiresAt() == null || !sample.getExpiresAt().isAfter(Instant.now())) continue;
+                    authority.isSyntheticParticipant(sample.getParticipantUserId())) { exclusions.merge("synthetic_demo",1,Integer::sum); continue; }
+                if (sample.getExpiresAt() == null || !sample.getExpiresAt().isAfter(Instant.now())) { exclusions.merge("expired_or_retention_missing",1,Integer::sum); continue; }
                 ResearchConsentEntity consent = consents.findById(sample.getParticipantUserId()).orElse(null);
                 if (consent == null || !consent.isActive() ||
                     !consentVersion.equals(consent.getConsentVersion()) ||
-                    !sample.getSubjectId().equals(consent.getSubjectId())) continue;
+                    !sample.getSubjectId().equals(consent.getSubjectId())) { exclusions.merge("consent_invalid",1,Integer::sum); continue; }
                 // Re-sanitize before export; never pass through unknown/direct identifiers.
                 ObjectNode safe;
                 try { safe = validator.validateStored(mapper.readTree(sample.getPayloadJson())).safePayload(); }
-                catch (ResponseStatusException | JsonProcessingException invalid) { continue; }
+                catch (ResponseStatusException | JsonProcessingException invalid) { exclusions.merge("stored_contract_invalid",1,Integer::sum); continue; }
                 if (bodyAttempt && (!source.equals(safe.path("source").asText()) ||
-                    safe.path("schemaVersion").asInt(-1)!=3)) continue;
+                    safe.path("schemaVersion").asInt(-1)!=3)) { exclusions.merge("schema_or_domain",1,Integer::sum); continue; }
                 if (!definition.actionId().equals(safe.path("actionId").asText()) ||
                     !definition.acceptsVersion(safe) ||
                     !definition.version().equals(annotation.getActionDefinitionVersion()) ||
                     (definition.schemaVersion() == 2 && !"hand-research-v1".equals(annotation.getLabelVersion())) ||
                     (bodyAttempt && !"body-attempt-label-v1".equals(annotation.getLabelVersion())) ||
-                    !definition.trainableLabels().contains(annotation.getLabel())) continue;
+                    !definition.trainableLabels().contains(annotation.getLabel())) { exclusions.merge("action_version_or_untrainable_label",1,Integer::sum); continue; }
                 safe.put("actionDefinitionVersion", definition.version());
                 safe.put("sampleId", sample.getId());
                 safe.put("subjectId", sample.getSubjectId());
-                if (!trainingFeatures.matches(safe)) continue;
+                if (!trainingFeatures.matches(safe)) { exclusions.merge("features_unavailable_or_invalid",1,Integer::sum); continue; }
                 if (bodyAttempt) {
                     String sessionGroup=sessionAliases.computeIfAbsent(sample.getSubjectId()+"|"+safe.path("sessionId").asText(),
                         ignored -> "session_"+(sessionAliases.size()+1));
                     String attemptGroup="attempt_"+(count+1);
                     safe.put("sessionId",sessionGroup);safe.put("attemptId",attemptGroup);
-                    safe.remove("resampleOfSampleId");
                     var group=groups.addObject();
                     group.put("sampleId",sample.getId());group.put("subjectPseudonym",sample.getSubjectId());
                     group.put("sessionGrouping",sessionGroup);group.put("attemptGrouping",attemptGroup);
                     group.put("source",source);
+                    group.put("platform",safe.path("platform").asText());
+                    group.put("annotationStatus","APPROVED");group.put("disposition","ACTIVE");
+                    group.put("consentActive",true);group.put("consentVersion",consentVersion);
+                    group.put("expiresAt",sample.getExpiresAt().toString());
+                    group.put("independentReview",true);group.put("synthetic",false);group.put("deleted",false);
+                    group.put("labelVersion",annotation.getLabelVersion());
+                    group.put("reviewedAt",annotation.getReviewedAt().toString());
+                    group.put("annotationRevision",annotation.getRevision());
+                    if (annotation.getSubmittedAt()!=null) group.put("submittedAt",annotation.getSubmittedAt().toString());
                 }
                 byte[] body = mapper.writeValueAsBytes(safe);
                 uncompressed += body.length;
@@ -158,8 +170,22 @@ public class ResearchManagementService {
                 zip.putNextEntry(new ZipEntry("samples/" + sample.getId() + ".json"));
                 zip.write(body);
                 zip.closeEntry();
+                if (bodyAttempt) {
+                    try {
+                        ((ObjectNode)groups.get(groups.size()-1)).put("payloadSha256",
+                            java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(body)));
+                    } catch (java.security.NoSuchAlgorithmException impossible) {
+                        throw new IllegalStateException("SHA-256 unavailable", impossible);
+                    }
+                }
                 String alias = aliases.computeIfAbsent(annotation.getTherapistUserId(),
                     ignored -> "annotator_" + (aliases.size() + 1));
+                if (bodyAttempt) {
+                    var group=(ObjectNode)groups.get(groups.size()-1);
+                    group.put("annotatorAlias",alias);
+                    group.put("reviewerAlias",reviewerAliases.computeIfAbsent(annotation.getReviewerUserId(),
+                        ignored -> "reviewer_"+(reviewerAliases.size()+1)));
+                }
                 labels.append(sample.getId()).append(',').append(annotation.getLabel()).append(',')
                     .append(alias).append(',').append(annotation.getLabelVersion()).append(',')
                     .append(annotation.getActionDefinitionVersion()).append('\n');
@@ -180,6 +206,14 @@ public class ResearchManagementService {
                 manifest.put("poseModelVersion","rtmpose-wholebody-133-v1");
                 manifest.set("groups",groups);
                 manifest.put("distributionPolicy","single-source-domain; no implicit phone/tv_pi pooling");
+                manifest.put("exportContractVersion","body-approved-export-v1");
+                manifest.put("labelMappingVersion","body-attempt-label-v1");
+                manifest.put("eligibilityCheckedAt",eligibilityCheckedAt.toString());
+                manifest.put("filteredApprovedCount",page.getContent().size()-count);
+                manifest.set("exclusionCounts",mapper.valueToTree(exclusions));
+                manifest.put("eligibilityPolicy","active-consent;unexpired;active;non-demo;independent-approved-review;validated-features");
+                manifest.put("professionalQualificationAttested",false);
+                manifest.put("consentSnapshotOnly",true);
             }
             manifest.set("featureNames", mapper.valueToTree(definition.featureNames()));
             manifest.put("sampleCount", count);
