@@ -79,6 +79,10 @@ class ResearchManagementServiceTest {
         when(samples.findById("sample-1")).thenReturn(Optional.of(s));
         when(consents.findById(1L)).thenReturn(Optional.of(consent(true)));
         byte[] zip=service.exportApproved(9L,"token",ResearchActionRegistry.STANDING,3,"tv_pi");
+        // Cross-language consumer smoke artifact, generated entirely from mock identities/geometry.
+        var fixturePath=java.nio.file.Path.of("target","body-r4-approved-test-export.zip");
+        java.nio.file.Files.createDirectories(fixturePath.getParent());
+        java.nio.file.Files.write(fixturePath,zip);
         String payload=entry(zip,"samples/sample-1.json");
         var manifest=mapper.readTree(entry(zip,"manifest.json"));
         var group=manifest.path("groups").get(0);

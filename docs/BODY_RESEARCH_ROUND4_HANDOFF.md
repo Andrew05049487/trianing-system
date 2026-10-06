@@ -10,7 +10,10 @@ Body v3 approved export is extended additively, without changing endpoints, sche
 - professionalQualificationAttested=false: backend permissions do not prove clinical qualifications. A fresh export plus separately governed professional attestation is required for real training.
 - consentSnapshotOnly=true: never promises later withdrawal will be reflected in a previously downloaded export.
 
-Focused ResearchManagementServiceTest: 10/10 PASS before final hardening; rerun plus full Maven test pending.
+Implementation commit: c5f45f7622fe299fcbd801ae12a25b49996ed49e.
+Focused ResearchManagementServiceTest: 10/10 PASS after hardening.
+Full mvn -q test: 333 tests total, 300 PASS / 33 gated skips / 0 failures/errors. Not real MySQL validation this round.
+Named test-only ZIP target/body-r4-approved-test-export.zip is emitted from mocks. Actual Java ZIP -> Python builder codec smoke PASS; it is never considered a real professional dataset.
 Flutter consumer is ml/train_body.py and ml/body_v3 on master; preserves legacy ml/train.py body v1 / hand v2.
 No real approved dataset provided. All training smoke inputs must be explicit SYNTHETIC/ENGINEERING_ONLY; never reuse Round 3 fake motion data as real evidence.
 
