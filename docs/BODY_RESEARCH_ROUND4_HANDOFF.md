@@ -18,3 +18,5 @@ Flutter consumer is ml/train_body.py and ml/body_v3 on master; preserves legacy 
 No real approved dataset provided. All training smoke inputs must be explicit SYNTHETIC/ENGINEERING_ONLY; never reuse Round 3 fake motion data as real evidence.
 
 No SQL migration, database access, new branch, push or deployment. Round 3 local MySQL validation preserved; Laboratory NOT VALIDATED / Production NOT DEPLOYED. No additional hardware motion acceptance required.
+
+Completed compatible Flutter implementation40145b34e5179709438fcbb0459ac7e08ec967d4. Synthetic-only persisted artifact/ONNX parity/software benchmark PASS, never a real validated model. See local docs/BODY_RESEARCH_ROUND4_REPORT.md and Flutter full38-topic report. No remaining backend implementation this round; final documentation commit recorded via git log. Stop before Round5.
