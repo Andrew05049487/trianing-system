@@ -14,6 +14,9 @@ import java.time.Instant;
 @Table(name = "research_audit")
 @Data
 public class ResearchAuditEntity {
+    @Column(name = "schema_version")
+    private Integer schemaVersion;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

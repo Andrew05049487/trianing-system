@@ -62,8 +62,16 @@ public final class ResearchActionRegistry {
             Collectors.toMap(Definition::actionId, Function.identity())));
     }
     public Definition byId(String id) { return definitions.get(id); }
+    // Explicit version selection. v3 is not the existing v1 export/model input.
+    public static final Definition BODY_ATTEMPT = new Definition(STANDING,3,
+        ResearchBodyAttemptValidator.DEFINITION,STANDING_DEFINITION.featureNames(),
+        STANDING_DEFINITION.angles(),STANDING_DEFINITION.leftRequired(),STANDING_DEFINITION.rightRequired(),4,
+        STANDING_DEFINITION.labels(),Set.of(),false,ignored -> null);
     public Definition forSample(JsonNode sample) {
         if (sample == null) return null;
+        if (sample.path("schemaVersion").asInt(-1)==3 && STANDING.equals(sample.path("actionId").asText())) {
+            return BODY_ATTEMPT.acceptsVersion(sample)?BODY_ATTEMPT:null;
+        }
         Definition definition = byId(sample.path("actionId").asText());
         return definition != null && definition.acceptsVersion(sample) ? definition : null;
     }

@@ -48,6 +48,7 @@ public class ResearchSampleValidator {
         try {
             if (mapper.writeValueAsBytes(input).length > MAX_JSON_BYTES) throw invalid();
         } catch (JsonProcessingException error) { throw invalid(); }
+        if (input.path("schemaVersion").asInt(-1) == 3) return new ResearchBodyAttemptValidator(mapper).validate(input, enforceRecentCapture);
         if (input.path("schemaVersion").asInt(-1) == 2) return validateHand(input, enforceRecentCapture);
         input.fieldNames().forEachRemaining(name -> {
             if (!ROOT_FIELDS.contains(name)) throw invalid();

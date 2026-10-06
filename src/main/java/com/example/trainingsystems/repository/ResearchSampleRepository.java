@@ -16,6 +16,7 @@ import java.time.Instant;
 
 public interface ResearchSampleRepository extends JpaRepository<ResearchSampleEntity, String> {
     Optional<ResearchSampleEntity> findByParticipantUserIdAndClientSampleId(Long participantUserId, String clientSampleId);
+    Optional<ResearchSampleEntity> findByParticipantUserIdAndAttemptId(Long participantUserId, String attemptId);
     Page<ResearchSampleEntity> findByParticipantUserId(Long participantUserId, Pageable pageable);
     Page<ResearchSampleEntity> findByParticipantUserIdIn(Collection<Long> participantUserIds, Pageable pageable);
     List<ResearchSampleEntity> findByParticipantUserId(Long participantUserId);

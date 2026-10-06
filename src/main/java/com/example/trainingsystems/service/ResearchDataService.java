@@ -59,6 +59,8 @@ public class ResearchDataService {
     // Empty by default: existing standing consent never implicitly covers hand actions.
     @Value("${research.hand-consent-version:}")
     private String handConsentVersion = "";
+    @org.springframework.beans.factory.annotation.Autowired
+    private ResearchBodyAssignmentService bodyAssignments;
 
     public ResearchDataService(
         UserRepository users, UserBindingRepository bindings,
@@ -128,6 +130,8 @@ public class ResearchDataService {
             throw forbidden("RESEARCH_CONSENT_REQUIRED");
         }
         ResearchSampleValidator.ValidatedSample validated = validator.validate(payload);
+        boolean bodyAttempt = payload.path("schemaVersion").asInt(-1)==3;
+        if (bodyAttempt) bodyAssignments.requireAssigned(userId, validated.safePayload());
         if (payload.path("schemaVersion").asInt(-1) == 2 &&
             (handConsentVersion.isBlank() || !handConsentVersion.equals(currentConsentVersion) ||
                 !handConsentVersion.equals(consent.getConsentVersion()))) {
@@ -137,6 +141,14 @@ public class ResearchDataService {
         String fingerprint = sha256(canonical);
         Optional<ResearchSampleEntity> previous = samples
             .findByParticipantUserIdAndClientSampleId(userId, validated.clientId());
+        if (bodyAttempt) {
+            var sameAttempt = samples.findByParticipantUserIdAndAttemptId(userId,
+                validated.safePayload().path("attemptId").asText());
+            if (sameAttempt.isPresent()) {
+                if (!fingerprint.equals(sameAttempt.get().getClientPayloadHash())) throw conflict("RESEARCH_ATTEMPT_ID_CONFLICT");
+                return sampleView(sameAttempt.get());
+            }
+        }
         if (previous.isPresent()) {
             if (!fingerprint.equals(previous.get().getClientPayloadHash())) {
                 throw conflict("RESEARCH_SAMPLE_ID_CONFLICT");
@@ -157,6 +169,13 @@ public class ResearchDataService {
         sample.setExpiresAt(sample.getUploadedAt().plusSeconds(policy.getRetentionDays() * 86400L));
         sample.setMovementSide(validated.side());
         sample.setCameraView(validated.cameraView());
+        if (bodyAttempt) {
+            var v3=validated.safePayload();
+            sample.setModality("body");sample.setSource(v3.path("source").asText());
+            sample.setSchemaVersion(3);sample.setActionId(v3.path("actionId").asText());
+            sample.setSessionId(v3.path("sessionId").asText());sample.setAttemptId(v3.path("attemptId").asText());
+            sample.setExerciseType(v3.path("exerciseType").asText());sample.setExerciseId(v3.path("exerciseId").asText());
+        }
         ObjectNode stored = validated.safePayload().deepCopy();
         stored.put("sampleId", sample.getId());
         stored.put("subjectId", consent.getSubjectId());
@@ -232,6 +251,7 @@ public class ResearchDataService {
         if ("SUBMITTED".equals(annotation.getStatus()) ||
             "APPROVED".equals(annotation.getStatus())) throw conflict("RESEARCH_LABEL_LOCKED");
         annotation.setSampleId(sampleId);
+        annotation.setSchemaVersion(sample.getSchemaVersion());
         annotation.setTherapistUserId(userId);
         annotation.setLabel(label);
         annotation.setNote(note == null ? "" : note.trim());
@@ -399,7 +419,9 @@ public class ResearchDataService {
             annotation == null ? "UNLABELED" : annotation.getStatus(),
             definition == null ? null : definition.actionId(),
             definition == null ? null : definition.schemaVersion(),
-            definition == null ? null : definition.version());
+            definition == null ? null : definition.version(),
+            sample.getModality(),sample.getSource(),sample.getSessionId(),sample.getAttemptId(),
+            sample.getExerciseType(),sample.getExerciseId(),sample.getDisposition());
     }
 
     private ResearchActionRegistry.Definition sampleDefinition(ResearchSampleEntity sample) {
@@ -419,6 +441,7 @@ public class ResearchDataService {
     private void snapshot(ResearchAnnotationEntity annotation, Long actorId) {
         ResearchAnnotationRevisionEntity revision = new ResearchAnnotationRevisionEntity();
         revision.setSampleId(annotation.getSampleId());
+        revision.setSchemaVersion(annotation.getSchemaVersion());
         revision.setRevision(annotation.getRevision());
         revision.setActorUserId(actorId);
         revision.setAnnotatorUserId(annotation.getTherapistUserId());
@@ -438,6 +461,10 @@ public class ResearchDataService {
         event.setActorUserId(actorId);
         event.setAction(action);
         event.setSampleId(sampleId);
+        if (sampleId != null) {
+            event.setSchemaVersion(samples.findById(sampleId)
+                .map(ResearchSampleEntity::getSchemaVersion).orElse(null));
+        }
         event.setCreatedAt(Instant.now());
         audits.save(event);
     }
@@ -479,7 +506,9 @@ public class ResearchDataService {
     public record SampleView(String id, String clientSampleId, String subjectId,
                              String movementSide, String cameraView, Instant capturedAt,
                              String annotationStatus, String actionId, Integer schemaVersion,
-                             String actionDefinitionVersion) {}
+                             String actionDefinitionVersion, String modality, String source,
+                             String sessionId, String attemptId, String exerciseType,
+                             String exerciseId, String disposition) {}
     public record AnnotationView(String label, String note, String labelVersion,
                                  String actionDefinitionVersion, String status, Instant updatedAt,
                                  int revision, Long annotatorUserId, Instant submittedAt,

@@ -12,6 +12,9 @@ import java.time.Instant;
 @Table(name = "research_annotations")
 @Data
 public class ResearchAnnotationEntity {
+    @Column(name = "schema_version")
+    private Integer schemaVersion;
+
     @Id
     @Column(name = "sample_id", length = 36)
     private String sampleId;

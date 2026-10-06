@@ -53,4 +53,15 @@ public class ResearchSampleEntity {
 
     @Column(name = "expires_at")
     private Instant expiresAt;
+
+    // Nullable for historical v1/v2 rows; no inference of legacy source.
+    @Column(name="modality", length=8) private String modality;
+    @Column(name="source", length=16) private String source;
+    @Column(name="schema_version") private Integer schemaVersion;
+    @Column(name="action_id", length=64) private String actionId;
+    @Column(name="session_id", length=100) private String sessionId;
+    @Column(name="attempt_id", length=100) private String attemptId;
+    @Column(name="exercise_type", length=16) private String exerciseType;
+    @Column(name="exercise_id", length=100) private String exerciseId;
+    @Column(name="disposition", nullable=false, length=32) private String disposition="ACTIVE";
 }

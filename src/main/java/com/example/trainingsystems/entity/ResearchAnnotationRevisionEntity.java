@@ -15,6 +15,9 @@ import java.time.Instant;
 @Table(name = "research_annotation_revisions")
 @Data
 public class ResearchAnnotationRevisionEntity {
+    @Column(name = "schema_version")
+    private Integer schemaVersion;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
