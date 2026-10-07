@@ -1,0 +1,11 @@
+# Round 8 backend handoff
+
+Schema 3 `standing_knee_raise` remains frozen. Schema 4 is separate review-only body data for `draw_circle`, `overhead_reach`, `raise_both_arms`, `elbow_forward`, `sit_to_stand`, and `lateral_step`. Each action has an exact immutable `*-body-review-v1` definition. Labels use `body-review-label-v1` (`meets_requirement`, `needs_correction`, `unassessable`); schema 4 `trainableLabels` is empty and formal ML export rejects version 4. R4 standing export tests continue to pass.
+
+`ResearchBodyReviewValidator` applies explicit root/frame field allowlists, bounded 17-point skeleton frames, monotonic IDs and timestamps, finite coordinates/scores, validity consistency, source/platform/version checks, recent capture, duration checks, side/mode checks, and no client-supplied subject pseudonym. `ResearchBodyAssignmentService` maps persisted DEFAULT exercise names to seven canonical action IDs and requires an active linked therapist assignment; CUSTOM exercises fail closed. `ResearchDataService` retains existing account/consent, retention, dedupe, therapist binding, annotation revision and independent review rules. Resample parent must still be retained, NEEDS_RESAMPLE, same patient/action/schema/exercise.
+
+No migration is required: existing sample and annotation schema/version/action/payload fields can represent schema 4. No Lab DB access or mutation was performed.
+
+`research.body-available-actions` is the explicit action-scope allowlist. Its default is `standing_knee_raise`. Before deployment of the new TV flow, review and set it to `standing_knee_raise,draw_circle,overhead_reach,raise_both_arms,elbow_forward,sit_to_stand,lateral_step` if all six new actions should be available. The backend returns this scope in patient consent; both clients fail closed for absent actions. Hand scope remains separate.
+
+Validation: `mvn -q test` passed (340 tests, 33 opt-in integration tests skipped), and `mvn -q -DskipTests package` passed. Unit/service synthetic flow covers upload, consent, list/detail, annotation draft/submit, independent reviewer, NEEDS_RESAMPLE, cross-action rejection, and schema 4 export rejection. It did not use a real HTTP server or database. Deployment, Render, Lab MySQL and Pi were not touched.

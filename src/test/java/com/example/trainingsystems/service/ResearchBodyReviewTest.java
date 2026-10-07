@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageImpl;
 import java.time.Instant;
 import java.util.*;
 import static org.mockito.Mockito.*;
@@ -40,7 +41,7 @@ class ResearchBodyReviewTest {
         when(consents.findById(1L)).thenReturn(Optional.of(consent));when(consents.findForUpload(1L)).thenReturn(Optional.of(consent));
         when(bindings.existsByPatient_IdAndLinkedUser_IdAndRelationshipIgnoreCase(eq(1L),anyLong(),eq("THERAPIST"))).thenReturn(true);
         sample=new ResearchSampleEntity();sample.setId("00000000-0000-4000-8000-000000000001");sample.setParticipantUserId(1L);
-        sample.setSubjectId("subject-test");sample.setSchemaVersion(3);sample.setExerciseType("DEFAULT");sample.setExerciseId("99");
+        sample.setSubjectId("subject-test");sample.setSchemaVersion(3);sample.setActionId("standing_knee_raise");sample.setExerciseType("DEFAULT");sample.setExerciseId("99");
         sample.setExpiresAt(Instant.now().plusSeconds(3600));sample.setPayloadJson(ResearchBodyAttemptTest.fixture().toString());
         when(samples.findById(sample.getId())).thenReturn(Optional.of(sample));
         when(samples.findForUpdate(sample.getId())).thenReturn(Optional.of(sample));
@@ -101,5 +102,52 @@ class ResearchBodyReviewTest {
     @Test void v3RequiresRevisionAndReasonOnResample() {
         assertThatThrownBy(()->service.reviewLabel(3L,"token",sample.getId(),"APPROVE","",null,null)).hasMessageContaining("409");
         assertThatThrownBy(()->service.reviewLabel(3L,"token",sample.getId(),"NEEDS_RESAMPLE","note",null,3)).hasMessageContaining("400");
+    }
+    @Test void isolatedSchemaFourFlowFromConsentToIndependentReviewAndResample() {
+        ReflectionTestUtils.setField(service, "bodyAvailableActions", "standing_knee_raise,draw_circle,overhead_reach");
+        var consent = consents.findById(1L).orElseThrow();
+        assertThat(service.consent(1L, "token").bodyAvailableActions()).contains("draw_circle");
+        sample.setSchemaVersion(4); sample.setActionId("draw_circle");
+        sample.setPayloadJson(ResearchBodyReviewValidatorTest.fixture("draw_circle").toString());
+        var link = new UserBinding(); link.setPatient(users.findById(1L).orElseThrow());
+        when(bindings.findAllByLinkedUser_IdAndRelationshipIgnoreCase(2L,"THERAPIST"))
+            .thenReturn(List.of(link));
+        when(consents.findByUserIdInAndActiveTrue(any())).thenReturn(List.of(consent));
+        when(samples.findByParticipantUserIdIn(any(),any()))
+            .thenReturn(new PageImpl<>(List.of(sample)));
+        assertThat(service.list(2L,"token",0,20).getContent().get(0).actionId())
+            .isEqualTo("draw_circle");
+        annotation.setStatus("RETURNED"); annotation.setLabel("needs_correction");
+        annotation.setLabelVersion("body-review-label-v1");
+        annotation.setActionDefinitionVersion("draw-circle-body-review-v1");
+        var draft = service.label(2L,"token",sample.getId(),"needs_correction","synthetic correction",
+            "body-review-label-v1","draw-circle-body-review-v1",3);
+        assertThat(draft.status()).isEqualTo("DRAFT");
+        assertThat(service.submitLabel(2L,"token",sample.getId(),4).status()).isEqualTo("SUBMITTED");
+        assertThatThrownBy(() -> service.reviewLabel(2L,"token",sample.getId(),
+            "APPROVE","",null,5)).hasMessageContaining("403");
+        assertThatThrownBy(() -> service.reviewLabel(3L,"token",sample.getId(),
+            "APPROVE","",null,4)).hasMessageContaining("409");
+        var reviewed = service.reviewLabel(3L,"token",sample.getId(),
+            "NEEDS_RESAMPLE","tracking incomplete","LOW_QUALITY",5);
+        assertThat(reviewed.status()).isEqualTo("RETURNED");
+        assertThat(sample.getDisposition()).isEqualTo("NEEDS_RESAMPLE");
+        var payload = ResearchBodyReviewValidatorTest.fixture("draw_circle");
+        payload.put("resampleOfSampleId", sample.getId());
+        when(samples.saveAndFlush(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        var replacement = service.upload(1L,"token",payload);
+        assertThat(replacement.resampleOfSampleId()).isEqualTo(sample.getId());
+        assertThat(replacement.schemaVersion()).isEqualTo(4);
+        var crossAction = ResearchBodyReviewValidatorTest.fixture("overhead_reach");
+        crossAction.put("resampleOfSampleId", sample.getId());
+        assertThatThrownBy(() -> service.upload(1L,"token",crossAction))
+            .hasMessageContaining("INVALID_RESAMPLE_CONTEXT");
+        assertThat(service.detail(2L,"token",sample.getId()).payload().path("frames").size()).isEqualTo(4);
+        consent.setActive(false);
+        assertThatThrownBy(() -> service.upload(1L,"token",payload))
+            .hasMessageContaining("RESEARCH_CONSENT_REQUIRED");
+        consent.setActive(true); consent.setConsentVersion("old-v1");
+        assertThatThrownBy(() -> service.upload(1L,"token",payload))
+            .hasMessageContaining("RESEARCH_CONSENT_REQUIRED");
     }
 }

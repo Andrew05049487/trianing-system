@@ -50,6 +50,10 @@ class ResearchBodyExportTest {
         assertThat(entry(export("phone"),"manifest.json")).contains("\"sampleCount\":0");
         assertThat(entry(zip,"labels.csv")).contains("insufficient_range").doesNotContain("87654");
     }
+    @Test void schemaFourReviewRecordsCannotEnterMlExport() {
+        assertThatThrownBy(() -> service.exportApproved(9L, "token", "draw_circle", 4, "tv_pi"))
+            .hasMessageContaining("UNSUPPORTED_RESEARCH_SCHEMA");
+    }
     @ParameterizedTest @ValueSource(strings={"REJECTED","NEEDS_RESAMPLE","EXCLUDED"})
     void nonActiveIsExcluded(String disposition) throws Exception {
         sample.setDisposition(disposition);emptyExport();

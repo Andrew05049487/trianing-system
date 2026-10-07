@@ -59,6 +59,9 @@ public class ResearchDataService {
     // Empty by default: existing standing consent never implicitly covers hand actions.
     @Value("${research.hand-consent-version:}")
     private String handConsentVersion = "";
+    // Study scope is explicit. Deployments retain standing-only until configured.
+    @Value("${research.body-available-actions:standing_knee_raise}")
+    private String bodyAvailableActions = "standing_knee_raise";
     @org.springframework.beans.factory.annotation.Autowired
     private ResearchBodyAssignmentService bodyAssignments;
 
@@ -124,15 +127,20 @@ public class ResearchDataService {
     public SampleView upload(Long userId, String token, JsonNode payload) {
         requireRole(userId, token, PATIENT);
         requireCollectionEnabled();
-        // Serialize v3 retries before duplicate lookup using the existing consent row.
-        boolean bodyAttempt = payload != null && payload.path("schemaVersion").asInt(-1)==3;
+        // Serialize body retries before duplicate lookup using the consent row.
+        int requestedSchema = payload == null ? -1 : payload.path("schemaVersion").asInt(-1);
+        boolean bodyAttempt = requestedSchema == 3 || requestedSchema == 4;
         ResearchConsentEntity consent = (bodyAttempt ? consents.findForUpload(userId) : consents.findById(userId))
             .orElseThrow(() -> forbidden("RESEARCH_CONSENT_REQUIRED"));
         if (!consent.isActive() || !currentConsentVersion.equals(consent.getConsentVersion())) {
             throw forbidden("RESEARCH_CONSENT_REQUIRED");
         }
         ResearchSampleValidator.ValidatedSample validated = validator.validate(payload);
-        if (bodyAttempt) bodyAssignments.requireAssigned(userId, validated.safePayload());
+        if (bodyAttempt) {
+            if (!bodyScope().contains(validated.safePayload().path("actionId").asText()))
+                throw forbidden("BODY_RESEARCH_SCOPE_NOT_APPROVED");
+            bodyAssignments.requireAssigned(userId, validated.safePayload());
+        }
         if (payload.path("schemaVersion").asInt(-1) == 2 &&
             (handConsentVersion.isBlank() || !handConsentVersion.equals(currentConsentVersion) ||
                 !handConsentVersion.equals(consent.getConsentVersion()))) {
@@ -175,7 +183,10 @@ public class ResearchDataService {
             ResearchSampleEntity parent = findSample(resampleOf);
             if (!userId.equals(parent.getParticipantUserId()) ||
                 !"NEEDS_RESAMPLE".equals(parent.getDisposition()) ||
-                !Integer.valueOf(3).equals(parent.getSchemaVersion()) ||
+                !(Integer.valueOf(3).equals(parent.getSchemaVersion()) ||
+                  Integer.valueOf(4).equals(parent.getSchemaVersion())) ||
+                !validated.safePayload().path("actionId").asText().equals(parent.getActionId()) ||
+                !Integer.valueOf(requestedSchema).equals(parent.getSchemaVersion()) ||
                 !validated.safePayload().path("exerciseId").asText().equals(parent.getExerciseId()) ||
                 !validated.safePayload().path("exerciseType").asText().equals(parent.getExerciseType()) ||
                 !consent.getSubjectId().equals(parent.getSubjectId()) ||
@@ -185,11 +196,11 @@ public class ResearchDataService {
             sample.setResampleOfSampleId(parent.getId());
         }
         if (bodyAttempt) {
-            var v3=validated.safePayload();
-            sample.setModality("body");sample.setSource(v3.path("source").asText());
-            sample.setSchemaVersion(3);sample.setActionId(v3.path("actionId").asText());
-            sample.setSessionId(v3.path("sessionId").asText());sample.setAttemptId(v3.path("attemptId").asText());
-            sample.setExerciseType(v3.path("exerciseType").asText());sample.setExerciseId(v3.path("exerciseId").asText());
+            var body=validated.safePayload();
+            sample.setModality("body");sample.setSource(body.path("source").asText());
+            sample.setSchemaVersion(requestedSchema);sample.setActionId(body.path("actionId").asText());
+            sample.setSessionId(body.path("sessionId").asText());sample.setAttemptId(body.path("attemptId").asText());
+            sample.setExerciseType(body.path("exerciseType").asText());sample.setExerciseId(body.path("exerciseId").asText());
         }
         ObjectNode stored = validated.safePayload().deepCopy();
         stored.put("sampleId", sample.getId());
@@ -263,6 +274,7 @@ public class ResearchDataService {
             labelVersion == null || !labelVersion.matches("[A-Za-z0-9_.-]{1,64}") ||
             (definition.schemaVersion() == 2 && !"hand-research-v1".equals(labelVersion)) ||
             (definition.schemaVersion() == 3 && !"body-attempt-label-v1".equals(labelVersion)) ||
+            (definition.schemaVersion() == 4 && !"body-review-label-v1".equals(labelVersion)) ||
             actionDefinitionVersion == null ||
             !definition.version().equals(actionDefinitionVersion) ||
             (note != null && note.length() > 1000)) throw badRequest("INVALID_RESEARCH_LABEL");
@@ -418,7 +430,14 @@ public class ResearchDataService {
             consent == null ? null : consent.getSubjectId(),
             consent == null ? null : consent.getConsentVersion(),
             currentConsentVersion, unavailableReason == null, unavailableReason,
-            unavailableReason == null && !handConsentVersion.isBlank() && handConsentVersion.equals(currentConsentVersion));
+            unavailableReason == null && !handConsentVersion.isBlank() && handConsentVersion.equals(currentConsentVersion),
+            bodyScope().stream().sorted().toList());
+    }
+
+    private Set<String> bodyScope() {
+        return java.util.Arrays.stream(bodyAvailableActions.split(","))
+            .map(String::trim).filter(ResearchBodyAssignmentService.DEFAULT_ACTIONS::containsValue)
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     private String collectionUnavailableReason() {
@@ -464,7 +483,8 @@ public class ResearchDataService {
     private ResearchSampleEntity lockBodySample(ResearchSampleEntity sample) {
         // A sample row exists even for the first draft: serialize before inserting
         // a missing annotation so concurrent editors get revision 409, not PK 500.
-        return Integer.valueOf(3).equals(sample.getSchemaVersion())
+        return (Integer.valueOf(3).equals(sample.getSchemaVersion()) ||
+                Integer.valueOf(4).equals(sample.getSchemaVersion()))
             ? samples.findForUpdate(sample.getId()).orElseThrow(() ->
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "RESEARCH_SAMPLE_NOT_FOUND"))
             : sample;
@@ -572,12 +592,14 @@ public class ResearchDataService {
     }
 
     private static void checkRevision(ResearchSampleEntity sample, ResearchAnnotationEntity annotation, Integer expected) {
-        if ((Integer.valueOf(3).equals(sample.getSchemaVersion()) && expected==null) ||
+        if (((Integer.valueOf(3).equals(sample.getSchemaVersion()) ||
+              Integer.valueOf(4).equals(sample.getSchemaVersion())) && expected==null) ||
             (expected!=null && expected!=annotation.getRevision())) throw conflict("RESEARCH_STALE_REVISION");
     }
 
     public record ConsentView(boolean active, String subjectId, String consentVersion,
-                              String currentVersion, boolean available, String unavailableReason, boolean handAvailable) {}
+                              String currentVersion, boolean available, String unavailableReason,
+                              boolean handAvailable, List<String> bodyAvailableActions) {}
     public record SampleView(String id, String clientSampleId, String subjectId,
                              String movementSide, String cameraView, Instant capturedAt,
                              String annotationStatus, String actionId, Integer schemaVersion,

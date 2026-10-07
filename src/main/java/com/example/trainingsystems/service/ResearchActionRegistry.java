@@ -67,10 +67,28 @@ public final class ResearchActionRegistry {
         ResearchBodyAttemptValidator.DEFINITION,STANDING_DEFINITION.featureNames(),
         STANDING_DEFINITION.angles(),STANDING_DEFINITION.leftRequired(),STANDING_DEFINITION.rightRequired(),4,
         STANDING_DEFINITION.labels(),STANDING_DEFINITION.trainableLabels(),false,ignored -> null);
+    /** Review-only body contracts. The empty trainable set is intentional. */
+    public static final Map<String, String> BODY_REVIEW_VERSIONS = Map.of(
+        "draw_circle", "draw-circle-body-review-v1",
+        "overhead_reach", "overhead-reach-body-review-v1",
+        "raise_both_arms", "raise-both-arms-body-review-v1",
+        "elbow_forward", "elbow-forward-body-review-v1",
+        "sit_to_stand", "sit-to-stand-body-review-v1",
+        "lateral_step", "lateral-step-body-review-v1");
+    public static final Map<String, Definition> BODY_REVIEW = BODY_REVIEW_VERSIONS.entrySet()
+        .stream().collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, entry ->
+            new Definition(entry.getKey(), 4, entry.getValue(), List.of(), Map.of(),
+                Set.of(), Set.of(), -1,
+                Set.of("meets_requirement", "needs_correction", "unassessable"),
+                Set.of(), false, ignored -> null)));
     public Definition forSample(JsonNode sample) {
         if (sample == null) return null;
         if (sample.path("schemaVersion").asInt(-1)==3 && STANDING.equals(sample.path("actionId").asText())) {
             return BODY_ATTEMPT.acceptsVersion(sample)?BODY_ATTEMPT:null;
+        }
+        if (sample.path("schemaVersion").asInt(-1)==4) {
+            Definition review = BODY_REVIEW.get(sample.path("actionId").asText());
+            return review != null && review.acceptsVersion(sample) ? review : null;
         }
         Definition definition = byId(sample.path("actionId").asText());
         return definition != null && definition.acceptsVersion(sample) ? definition : null;
